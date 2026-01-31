@@ -1,0 +1,515 @@
+tags:
+  - name: QR Codes
+    description: QR Code and QR Set management APIs
+
+paths:
+  /api/v1/{app}/qr-codes/scan/{code}:
+    get:
+      tags:
+        - QR Codes
+      summary: Scan QR code (Public)
+      description: Public endpoint for customers to scan QR codes and get hotel/room information
+      parameters:
+        - $ref: '#/components/parameters/AppParam'
+        - name: code
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^TMQR-[A-Z0-9]{10}$'
+          example: TMQR-AB3CDE7FGH
+          description: QR code to scan (format TMQR-XXXXXXXXXX)
+      responses:
+        '200':
+          description: QR code found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: '#/components/schemas/QrCodeInfo'
+        '404':
+          description: QR code not found or inactive
+
+  /api/v1/{app}/qr-codes/hotels/{hotelId}/set:
+    get:
+      tags:
+        - QR Codes
+      summary: Get QR Set for a hotel
+      description: Get the QR Set assigned to a hotel with QR code count
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/AppParam'
+        - $ref: '#/components/parameters/HotelIdParam'
+      responses:
+        '200':
+          description: QR Set found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: '#/components/schemas/QrSetInfo'
+        '401':
+          description: Unauthorized
+        '404':
+          description: QR Set not found
+
+  /api/v1/{app}/qr-codes/hotels/{hotelId}:
+    get:
+      tags:
+        - QR Codes
+      summary: Get all QR codes for a hotel
+      description: Get all QR codes with optional filtering by type and status
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/AppParam'
+        - $ref: '#/components/parameters/HotelIdParam'
+        - name: type
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [ROOM, RESTAURANT, BAR]
+            default: ROOM
+          description: Filter by type
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [ACTIVE, INACTIVE]
+          description: Filter by status
+      responses:
+        '200':
+          description: QR codes list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/QrCodeInfo'
+        '401':
+          description: Unauthorized
+
+  /api/v1/{app}/qr-codes/hotels/{hotelId}/locations:
+    get:
+      tags:
+        - QR Codes
+      summary: Get distinct locations
+      description: Get list of unique floors or zones for a hotel
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/AppParam'
+        - $ref: '#/components/parameters/HotelIdParam'
+        - name: type
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [ROOM, RESTAURANT, BAR]
+          description: Type of location to fetch (ROOM -> floors, RESTAURANT -> zones)
+      responses:
+        '200':
+          description: Locations list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      locations:
+                        type: array
+                        items:
+                          type: string
+                        example: ["1st Floor", "Patio"]
+        '401':
+          description: Unauthorized
+
+  /api/v1/{app}/qr-codes/hotels/{hotelId}/bulk-generate:
+    post:
+      tags:
+        - QR Codes
+      summary: Bulk generate QR codes
+      description: Generate multiple QR codes for rooms or tables based on configuration
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/AppParam'
+        - $ref: '#/components/parameters/HotelIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenerateQrCodesInput'
+            examples:
+              roomsWithPrefix:
+                summary: Generate room QRs with prefix (roomNumber becomes R-101, R-102...)
+                value:
+                  type: ROOM
+                  config:
+                    - name: "1st Floor"
+                      prefix: "R-"
+                      count: 3
+                      startFrom: 101
+              tablesWithPrefix:
+                summary: Generate restaurant table QRs with prefix (tableNumber becomes T-1, T-2...)
+                value:
+                  type: RESTAURANT
+                  config:
+                    - name: "Patio"
+                      prefix: "T-"
+                      count: 5
+                      startFrom: 1
+      responses:
+        '201':
+          description: QR codes generated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "Successfully generated 10 QR codes"
+                  data:
+                    type: object
+                    properties:
+                      created:
+                        type: number
+                        example: 10
+                      failed:
+                        type: array
+                        items:
+                          type: string
+                        example: []
+        '400':
+          description: Invalid request
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden
+
+  /api/v1/{app}/qr-codes/hotels/{hotelId}/single:
+    post:
+      tags:
+        - QR Codes
+      summary: Add single QR code
+      description: Add a single QR code for a room or table
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/AppParam'
+        - $ref: '#/components/parameters/HotelIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - type
+              properties:
+                type:
+                  type: string
+                  enum: [ROOM, RESTAURANT, BAR]
+                floor:
+                  type: string
+                roomNumber:
+                  type: string
+                zone:
+                  type: string
+                tableNumber:
+                  type: string
+            example:
+              type: ROOM
+              floor: "1st Floor"
+              roomNumber: "105"
+      responses:
+        '201':
+          description: QR code created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: '#/components/schemas/QrCodeInfo'
+        '400':
+          description: QR code already exists
+        '401':
+          description: Unauthorized
+
+  /api/v1/{app}/qr-codes/{codeId}/status:
+    patch:
+      tags:
+        - QR Codes
+      summary: Toggle QR Code Status (Activate/Deactivate)
+      description: |
+        Activates or deactivates a QR code by updating its `status` field.
+        **Note:** This only changes the status (ACTIVE/INACTIVE) but keeps `isActive: true`, so the code remains visible in queries.
+        To completely hide a QR code, use the DELETE endpoint instead.
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/AppParam'
+        - name: codeId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: QR Code ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - isActive
+              properties:
+                isActive:
+                  type: boolean
+                reason:
+                  type: string
+                  description: Required if deactivating
+            example:
+              isActive: false
+              reason: "Maintenance"
+      responses:
+        '200':
+          description: Status updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+        '400':
+          description: Invalid request
+        '401':
+          description: Unauthorized
+
+  /api/v1/{app}/qr-codes/{codeId}:
+    delete:
+      tags:
+        - QR Codes
+      summary: Delete QR Code (Soft Delete)
+      description: |
+        Soft deletes a QR code by setting `isActive: false`.
+        Deleted codes are completely hidden from all queries and cannot be scanned.
+        **Note:** This is different from toggle status - toggle only changes status to INACTIVE but keeps code visible.
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/AppParam'
+        - name: codeId
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^[a-f\d]{24}$'
+          description: QR Code ID
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+                  description: Optional reason for deletion
+                  example: "Room removed from hotel"
+      responses:
+        '200':
+          description: QR Code deleted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "QR Code deleted successfully"
+        '400':
+          description: QR Code not found or already deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden - Insufficient permissions
+
+components:
+  parameters:
+    AppParam:
+      name: app
+      in: path
+      required: true
+      schema:
+        type: string
+        enum: [admin, founder, manager, sales, customer, kitchen, frontdesk]
+      description: Application/panel identifier
+
+    HotelIdParam:
+      name: hotelId
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Hotel ID
+
+  schemas:
+    GenerateQrCodeConfig:
+      type: object
+      required:
+        - name
+        - count
+      properties:
+        name:
+          type: string
+          description: Floor name (ROOM) or Zone name (RESTAURANT/BAR)
+          example: "1st Floor"
+        prefix:
+          type: string
+          nullable: true
+          description: Optional prefix for roomNumber/tableNumber generation (e.g., R-101, T-1)
+          example: "R-"
+        count:
+          type: integer
+          minimum: 1
+          maximum: 100
+          description: Number of QR codes to generate for this floor/zone
+          example: 10
+        startFrom:
+          type: integer
+          minimum: 1
+          default: 1
+          description: Starting number used in generation
+          example: 101
+
+    GenerateQrCodesInput:
+      type: object
+      required:
+        - type
+        - config
+      properties:
+        type:
+          type: string
+          enum: [ROOM, RESTAURANT, BAR]
+          example: ROOM
+        config:
+          type: array
+          minItems: 1
+          maxItems: 20
+          items:
+            $ref: '#/components/schemas/GenerateQrCodeConfig'
+
+    QrSetInfo:
+      type: object
+      properties:
+        id:
+          type: string
+          example: "6789abc..."
+        hotelId:
+          type: string
+          example: "6789abc..."
+        status:
+          type: string
+          enum: [ACTIVE, INACTIVE]
+          example: ACTIVE
+        qrCodeCount:
+          type: number
+          example: 50
+        isActive:
+          type: boolean
+          example: true
+        createdAt:
+          type: string
+          format: date-time
+
+    QrCodeInfo:
+      type: object
+      properties:
+        id:
+          type: string
+          example: "6789abc..."
+        code:
+          type: string
+          example: TMQR-AB3CDE7FGH
+        type:
+          type: string
+          enum: [ROOM, RESTAURANT, BAR]
+          example: ROOM
+        floor:
+          type: string
+          example: "1st Floor"
+        roomNumber:
+          type: string
+          example: "101"
+        zone:
+          type: string
+          example: "Patio"
+        tableNumber:
+          type: string
+          example: "T-1"
+        status:
+          type: string
+          enum: [ACTIVE, INACTIVE]
+          example: ACTIVE
+        isActive:
+          type: boolean
+          example: true
+        createdAt:
+          type: string
+          format: date-time
+        hotelId:
+          type: string
+          description: Only included in scan response
+          example: "6789abc..."

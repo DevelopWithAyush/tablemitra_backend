@@ -1,0 +1,916 @@
+paths:
+  # ==================== ADMIN ENDPOINTS ====================
+  /api/v1/{app}/company/admins:
+    get:
+      tags:
+        - Company - Admins
+      summary: List all admins
+      description: Get paginated list of admin profiles
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      parameters:
+        - name: app
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [admin]
+          description: Must be 'admin'
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+          description: Page number
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+          description: Items per page
+        - name: search
+          in: query
+          schema:
+            type: string
+          description: Search by name or email
+        - name: isActive
+          in: query
+          schema:
+            type: boolean
+          description: Filter by active status
+      responses:
+        "200":
+          description: List of admins
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/AdminProfile"
+                  pagination:
+                    $ref: "#/components/schemas/Pagination"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Forbidden - Missing MANAGE_ADMINS permission
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+    post:
+      tags:
+        - Company - Admins
+      summary: Onboard new admin
+      description: Create a new admin profile with user account
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      parameters:
+        - name: app
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [admin]
+          description: Must be 'admin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateAdminInput"
+      responses:
+        "201":
+          description: Admin onboarded successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "Admin onboarded successfully"
+                  data:
+                    $ref: "#/components/schemas/AdminProfile"
+        "400":
+          description: Bad request - Email exists or user already has role
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Forbidden - Missing MANAGE_ADMINS permission
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/v1/{app}/company/admins/{id}:
+    get:
+      tags:
+        - Company - Admins
+      summary: Get admin by ID
+      description: Get a specific admin profile by ID
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      parameters:
+        - name: app
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [admin]
+          description: Must be 'admin'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^[0-9a-fA-F]{24}$'
+          description: Admin profile ID (MongoDB ObjectId)
+      responses:
+        "200":
+          description: Admin profile
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: "#/components/schemas/AdminProfile"
+        "404":
+          description: Admin not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+    patch:
+      tags:
+        - Company - Admins
+      summary: Update admin
+      description: Update an existing admin profile
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      parameters:
+        - name: app
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [admin]
+          description: Must be 'admin'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^[0-9a-fA-F]{24}$'
+          description: Admin profile ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateAdminInput"
+      responses:
+        "200":
+          description: Admin updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "Admin updated successfully"
+                  data:
+                    $ref: "#/components/schemas/AdminProfile"
+        "400":
+          description: Bad request - Email already exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+    delete:
+      tags:
+        - Company - Admins
+      summary: Deactivate admin
+      description: Soft delete (deactivate) an admin profile
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      parameters:
+        - name: app
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [admin]
+          description: Must be 'admin'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^[0-9a-fA-F]{24}$'
+          description: Admin profile ID
+      responses:
+        "200":
+          description: Admin deactivated successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Success"
+
+  # ==================== CUSTOMER CARE ENDPOINTS ====================
+  /api/v1/{app}/company/customer-care:
+    get:
+      tags:
+        - Company - Customer Care
+      summary: List all customer care
+      description: Get paginated list of customer care profiles
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      parameters:
+        - name: app
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [admin]
+          description: Must be 'admin'
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: search
+          in: query
+          schema:
+            type: string
+          description: Search by name, email, or employee code
+        - name: isActive
+          in: query
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: List of customer care profiles
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/CustomerCareProfile"
+                  pagination:
+                    $ref: "#/components/schemas/Pagination"
+
+    post:
+      tags:
+        - Company - Customer Care
+      summary: Onboard new customer care
+      description: Create a new customer care profile. Employee code (TMC###) is auto-generated.
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      parameters:
+        - name: app
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [admin]
+          description: Must be 'admin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCustomerCareInput"
+      responses:
+        "201":
+          description: Customer care onboarded successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "Customer care onboarded successfully"
+                  data:
+                    $ref: "#/components/schemas/CustomerCareProfile"
+
+  /api/v1/{app}/company/customer-care/{id}:
+    get:
+      tags:
+        - Company - Customer Care
+      summary: Get customer care by ID
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      parameters:
+        - name: app
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [admin]
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^[0-9a-fA-F]{24}$'
+      responses:
+        "200":
+          description: Customer care profile
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: "#/components/schemas/CustomerCareProfile"
+        "404":
+          description: Customer care not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+    patch:
+      tags:
+        - Company - Customer Care
+      summary: Update customer care
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      parameters:
+        - name: app
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [admin]
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^[0-9a-fA-F]{24}$'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateCustomerCareInput"
+      responses:
+        "200":
+          description: Customer care updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "Customer care updated successfully"
+                  data:
+                    $ref: "#/components/schemas/CustomerCareProfile"
+
+    delete:
+      tags:
+        - Company - Customer Care
+      summary: Deactivate customer care
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      parameters:
+        - name: app
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [admin]
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^[0-9a-fA-F]{24}$'
+      responses:
+        "200":
+          description: Customer care deactivated successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Success"
+
+  # ==================== SALES ENDPOINTS ====================
+  /api/v1/{app}/company/sales:
+    get:
+      tags:
+        - Company - Sales
+      summary: List all sales personnel
+      description: Get paginated list of sales profiles
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      parameters:
+        - name: app
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [admin]
+          description: Must be 'admin'
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: search
+          in: query
+          schema:
+            type: string
+          description: Search by name, email, or employee code
+        - name: isActive
+          in: query
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: List of sales profiles
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/SalesProfile"
+                  pagination:
+                    $ref: "#/components/schemas/Pagination"
+
+    post:
+      tags:
+        - Company - Sales
+      summary: Onboard new sales person
+      description: Create a new sales profile. Employee code (TMS###) is auto-generated.
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      parameters:
+        - name: app
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [admin]
+          description: Must be 'admin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSalesInput"
+      responses:
+        "201":
+          description: Sales person onboarded successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "Sales person onboarded successfully"
+                  data:
+                    $ref: "#/components/schemas/SalesProfile"
+
+  /api/v1/{app}/company/sales/{id}:
+    get:
+      tags:
+        - Company - Sales
+      summary: Get sales person by ID
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      parameters:
+        - name: app
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [admin]
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^[0-9a-fA-F]{24}$'
+      responses:
+        "200":
+          description: Sales profile
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: "#/components/schemas/SalesProfile"
+        "404":
+          description: Sales person not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+    patch:
+      tags:
+        - Company - Sales
+      summary: Update sales person
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      parameters:
+        - name: app
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [admin]
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^[0-9a-fA-F]{24}$'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateSalesInput"
+      responses:
+        "200":
+          description: Sales person updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "Sales person updated successfully"
+                  data:
+                    $ref: "#/components/schemas/SalesProfile"
+
+    delete:
+      tags:
+        - Company - Sales
+      summary: Deactivate sales person
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      parameters:
+        - name: app
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [admin]
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^[0-9a-fA-F]{24}$'
+      responses:
+        "200":
+          description: Sales person deactivated successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Success"
+
+# ==================== SCHEMAS ====================
+components:
+  schemas:
+    AdminProfile:
+      type: object
+      properties:
+        _id:
+          type: string
+          example: "507f1f77bcf86cd799439011"
+        userId:
+          type: object
+          properties:
+            _id:
+              type: string
+            phone:
+              type: string
+        name:
+          type: string
+          example: "John Doe"
+        email:
+          type: string
+          example: "john@tablemitra.com"
+        isEmailVerified:
+          type: boolean
+          example: false
+        profilePicture:
+          type: object
+          nullable: true
+          properties:
+            _id:
+              type: string
+            url:
+              type: string
+            type:
+              type: string
+        isActive:
+          type: boolean
+          example: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CreateAdminInput:
+      type: object
+      required:
+        - phone
+        - name
+        - email
+      properties:
+        phone:
+          type: string
+          pattern: '^\+?[1-9]\d{1,14}$'
+          example: "+919876543210"
+          description: Phone number with country code
+        name:
+          type: string
+          minLength: 2
+          maxLength: 100
+          example: "John Doe"
+        email:
+          type: string
+          format: email
+          example: "john@tablemitra.com"
+
+    UpdateAdminInput:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 2
+          maxLength: 100
+        email:
+          type: string
+          format: email
+        profilePicture:
+          type: string
+          description: Attachment ID (MongoDB ObjectId)
+        isActive:
+          type: boolean
+
+    CustomerCareProfile:
+      type: object
+      properties:
+        _id:
+          type: string
+          example: "507f1f77bcf86cd799439011"
+        userId:
+          type: object
+          properties:
+            _id:
+              type: string
+            phone:
+              type: string
+        employeeCode:
+          type: string
+          example: "TMC001"
+          description: Auto-generated employee code
+        designation:
+          type: string
+          enum: [CUSTOMER_CARE, CUSTOMER_CARE_LEAD, CUSTOMER_CARE_MANAGER]
+          example: "CUSTOMER_CARE"
+        name:
+          type: string
+          example: "Jane Smith"
+        email:
+          type: string
+          example: "jane@tablemitra.com"
+        isEmailVerified:
+          type: boolean
+        profilePicture:
+          type: object
+          nullable: true
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CreateCustomerCareInput:
+      type: object
+      required:
+        - phone
+        - name
+        - email
+        - designation
+      properties:
+        phone:
+          type: string
+          pattern: '^\+?[1-9]\d{1,14}$'
+          example: "+919876543211"
+        name:
+          type: string
+          minLength: 2
+          maxLength: 100
+          example: "Jane Smith"
+        email:
+          type: string
+          format: email
+          example: "jane@tablemitra.com"
+        designation:
+          type: string
+          enum: [CUSTOMER_CARE, CUSTOMER_CARE_LEAD, CUSTOMER_CARE_MANAGER]
+          example: "CUSTOMER_CARE"
+
+    UpdateCustomerCareInput:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 2
+          maxLength: 100
+        email:
+          type: string
+          format: email
+        designation:
+          type: string
+          enum: [CUSTOMER_CARE, CUSTOMER_CARE_LEAD, CUSTOMER_CARE_MANAGER]
+        profilePicture:
+          type: string
+        isActive:
+          type: boolean
+
+    SalesProfile:
+      type: object
+      properties:
+        _id:
+          type: string
+          example: "507f1f77bcf86cd799439011"
+        userId:
+          type: object
+          properties:
+            _id:
+              type: string
+            phone:
+              type: string
+        employeeCode:
+          type: string
+          example: "TMS001"
+          description: Auto-generated employee code
+        name:
+          type: string
+          example: "Bob Wilson"
+        email:
+          type: string
+          example: "bob@tablemitra.com"
+        isEmailVerified:
+          type: boolean
+        profilePicture:
+          type: object
+          nullable: true
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CreateSalesInput:
+      type: object
+      required:
+        - phone
+        - name
+        - email
+      properties:
+        phone:
+          type: string
+          pattern: '^\+?[1-9]\d{1,14}$'
+          example: "+919876543212"
+        name:
+          type: string
+          minLength: 2
+          maxLength: 100
+          example: "Bob Wilson"
+        email:
+          type: string
+          format: email
+          example: "bob@tablemitra.com"
+
+    UpdateSalesInput:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 2
+          maxLength: 100
+        email:
+          type: string
+          format: email
+        profilePicture:
+          type: string
+        isActive:
+          type: boolean

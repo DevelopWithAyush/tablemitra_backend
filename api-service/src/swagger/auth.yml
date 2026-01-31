@@ -1,0 +1,405 @@
+paths:
+  /api/v1/{app}/auth/send-otp:
+    post:
+      tags:
+        - Auth
+      summary: Send OTP to phone number
+      description: Sends a 4-digit OTP to the provided phone number. For customers, auto-registers if not exists.
+      parameters:
+        - name: app
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [admin, founder, customer-care, sales, manager, frontdesk, kitchen, room-service, customer]
+          description: Application/role type
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - phone
+              properties:
+                phone:
+                  type: string
+                  pattern: '^\+?[1-9]\d{1,14}$'
+                  example: "+917572077736"
+                  description: Phone number with country code
+      responses:
+        "200":
+          description: OTP sent successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "OTP Sent Successfully"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/v1/{app}/auth/verify-otp:
+    post:
+      tags:
+        - Auth
+      summary: Verify OTP and get tokens
+      description: Verifies the OTP and returns access token. Sets refresh token in httpOnly cookie.
+      parameters:
+        - name: app
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [admin, founder, customer-care, sales, manager, frontdesk, kitchen, room-service, customer]
+          description: Application/role type
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - phone
+                - code
+              properties:
+                phone:
+                  type: string
+                  pattern: '^\+?[1-9]\d{1,14}$'
+                  example: "+917572077736"
+                code:
+                  type: string
+                  minLength: 4
+                  maxLength: 4
+                  example: "1234"
+                  description: 4-digit OTP code
+      responses:
+        "200":
+          description: OTP verified, tokens issued
+          headers:
+            Set-Cookie:
+              description: Sets accessToken and refreshToken cookies
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "OTP verified successfully"
+                  data:
+                    type: object
+                    properties:
+                      accessToken:
+                        type: string
+                        example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+        "400":
+          description: Invalid or expired OTP
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/v1/{app}/auth/refresh-token:
+    post:
+      tags:
+        - Auth
+      summary: Refresh access token
+      description: Uses the refresh token from cookies to generate a new access token. Sets the new access token in httpOnly cookie.
+      parameters:
+        - name: app
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [admin, founder, customer-care, sales, manager, frontdesk, kitchen, room-service, customer]
+          description: Application/role type
+      responses:
+        "200":
+          description: Token refreshed successfully
+          headers:
+            Set-Cookie:
+              description: Sets new accessToken cookie
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "Token refreshed successfully"
+                  data:
+                    type: object
+                    properties:
+                      accessToken:
+                        type: string
+                        example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+        "401":
+          description: Invalid or expired refresh token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/v1/{app}/auth/me:
+    get:
+      tags:
+        - Auth
+      summary: Get current user profile
+      description: |
+        Returns the authenticated user's profile based on their role.
+        **Includes permissions array** to help frontend manipulate UI based on user's role and permissions.
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      parameters:
+        - name: app
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [admin, founder, customer-care, sales, manager, frontdesk, kitchen, room-service, customer]
+          description: Application/role type
+      responses:
+        "200":
+          description: User profile with permissions
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    description: User profile data (varies by role) with permissions array
+                    properties:
+                      permissions:
+                        type: array
+                        items:
+                          type: string
+                        example: ["VIEW_MENU", "CREATE_MENU", "UPDATE_MENU", "VIEW_SERVICE", "CREATE_SERVICE"]
+                        description: Array of permission keys assigned to the user's role
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Profile not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/v1/{app}/auth/logout:
+    post:
+      tags:
+        - Auth
+      summary: Logout user
+      description: Invalidates the user session and clears cookies
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      parameters:
+        - name: app
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [admin, founder, customer-care, sales, manager, frontdesk, kitchen, room-service, customer]
+          description: Application/role type
+      responses:
+        "200":
+          description: Logged out successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "Logged out successfully"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/v1/{app}/auth/chains:
+    get:
+      tags:
+        - Auth
+      summary: Get founder's available chains
+      description: |
+        Returns all chains the authenticated founder has access to.
+        Used for the chain context switcher in the Founder panel.
+        **Only available for founders (app=founder)**
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      parameters:
+        - name: app
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [founder]
+          description: Must be "founder"
+      responses:
+        "200":
+          description: List of chains
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      chains:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            chainId:
+                              type: string
+                              example: "507f1f77bcf86cd799439011"
+                            chainName:
+                              type: string
+                              example: "Taj Hotels"
+                            chainLogo:
+                              type: string
+                              example: "507f1f77bcf86cd799439012"
+                            role:
+                              type: string
+                              enum: [OWNER, CO_OWNER, DIRECTOR, PARTNER]
+                              example: "OWNER"
+                            hotelCount:
+                              type: integer
+                              example: 5
+                      defaultChainId:
+                        type: string
+                        example: "507f1f77bcf86cd799439011"
+                        description: First/default chain ID
+        "400":
+          description: Invalid app (not founder)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: No chains found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/v1/{app}/auth/switch-chain:
+    post:
+      tags:
+        - Auth
+      summary: Switch chain context (mini re-login)
+      description: |
+        Switches the founder's current chain context.
+        Issues new access and refresh tokens with the new chain context.
+        Updates the cookies with new tokens.
+        **Only available for founders (app=founder)**
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      parameters:
+        - name: app
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [founder]
+          description: Must be "founder"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - chainId
+              properties:
+                chainId:
+                  type: string
+                  minLength: 24
+                  maxLength: 24
+                  example: "507f1f77bcf86cd799439011"
+                  description: Target chain ID to switch to
+      responses:
+        "200":
+          description: Chain context switched successfully
+          headers:
+            Set-Cookie:
+              description: Sets new accessToken and refreshToken cookies with new chain context
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "Chain context switched successfully"
+                  data:
+                    type: object
+                    properties:
+                      accessToken:
+                        type: string
+                        example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                        description: New access token with updated chain context
+        "400":
+          description: Invalid request (missing chainId, not founder, or no access to chain)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"

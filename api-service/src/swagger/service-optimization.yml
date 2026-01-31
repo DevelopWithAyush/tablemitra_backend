@@ -1,0 +1,773 @@
+paths:
+  # ==================== CATEGORY ENDPOINTS ====================
+  /api/v1/{app}/service/categories:
+    get:
+      tags:
+        - Service - Categories
+      summary: Get all service categories
+      description: Get paginated list of service categories for the hotel (from JWT context)
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ServiceAppParam"
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: search
+          in: query
+          schema:
+            type: string
+          description: Search by name or description
+        - name: isActive
+          in: query
+          schema:
+            type: boolean
+          description: Filter by active status
+      responses:
+        "200":
+          description: List of categories
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ServiceCategory"
+                  pagination:
+                    $ref: "#/components/schemas/ServicePagination"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+        "403":
+          description: Forbidden - Insufficient permissions
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+
+    post:
+      tags:
+        - Service - Categories
+      summary: Create a new service category
+      description: Create a new service category for the hotel
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ServiceAppParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateServiceCategoryInput"
+      responses:
+        "201":
+          description: Category created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "Category created successfully"
+                  data:
+                    $ref: "#/components/schemas/ServiceCategory"
+        "400":
+          description: Bad request - Category name exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+
+  /api/v1/{app}/service/categories/{categoryId}:
+    put:
+      tags:
+        - Service - Categories
+      summary: Update a service category
+      description: Update an existing service category
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ServiceAppParam"
+        - $ref: "#/components/parameters/ServiceCategoryIdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateServiceCategoryInput"
+      responses:
+        "200":
+          description: Category updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "Category updated successfully"
+                  data:
+                    $ref: "#/components/schemas/ServiceCategory"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+        "404":
+          description: Category not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+
+  /api/v1/{app}/service/categories/{categoryId}/toggle:
+    put:
+      tags:
+        - Service - Categories
+      summary: Toggle category active status
+      description: Activate or deactivate a service category
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ServiceAppParam"
+        - $ref: "#/components/parameters/ServiceCategoryIdParam"
+      responses:
+        "200":
+          description: Category toggled successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "Category activated successfully"
+                  data:
+                    type: object
+                    properties:
+                      isActive:
+                        type: boolean
+        "404":
+          description: Category not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+
+  # ==================== SERVICE ENDPOINTS ====================
+  /api/v1/{app}/service/categories/{categoryId}/services:
+    get:
+      tags:
+        - Service - Services
+      summary: Get services in a category
+      description: Get paginated list of services in a specific category
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ServiceAppParam"
+        - $ref: "#/components/parameters/ServiceCategoryIdParam"
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: search
+          in: query
+          schema:
+            type: string
+          description: Search by name, description, or short code
+        - name: isActive
+          in: query
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: List of services
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Service"
+                  pagination:
+                    $ref: "#/components/schemas/ServicePagination"
+        "404":
+          description: Category not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+
+    post:
+      tags:
+        - Service - Services
+      summary: Create a new service
+      description: Create a new service in a category
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ServiceAppParam"
+        - $ref: "#/components/parameters/ServiceCategoryIdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateServiceInput"
+      responses:
+        "201":
+          description: Service created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "Service created successfully"
+                  data:
+                    $ref: "#/components/schemas/Service"
+        "400":
+          description: Bad request - Short code exists or validation failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+        "404":
+          description: Category not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+
+  /api/v1/{app}/service/services/{serviceId}:
+    put:
+      tags:
+        - Service - Services
+      summary: Update a service
+      description: Update an existing service
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ServiceAppParam"
+        - $ref: "#/components/parameters/ServiceIdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateServiceInput"
+      responses:
+        "200":
+          description: Service updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "Service updated successfully"
+                  data:
+                    $ref: "#/components/schemas/Service"
+        "400":
+          description: Bad request - Validation failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+        "404":
+          description: Service not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+
+  /api/v1/{app}/service/services/{serviceId}/toggle:
+    put:
+      tags:
+        - Service - Services
+      summary: Toggle service active status
+      description: Activate or deactivate a service
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ServiceAppParam"
+        - $ref: "#/components/parameters/ServiceIdParam"
+      responses:
+        "200":
+          description: Service toggled successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "Service activated successfully"
+                  data:
+                    type: object
+                    properties:
+                      isActive:
+                        type: boolean
+        "404":
+          description: Service not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+
+  # ==================== FULL CATALOG ENDPOINTS ====================
+  /api/v1/{app}/service/all-services:
+    get:
+      tags:
+        - Service - Full Catalog
+      summary: Get full service catalog
+      description: Get complete service catalog with nested categories and services
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ServiceAppParam"
+        - name: includeInactive
+          in: query
+          schema:
+            type: boolean
+            default: false
+          description: Include inactive services and categories
+      responses:
+        "200":
+          description: Full service catalog
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: "#/components/schemas/FullServiceCatalog"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+
+# ==================== COMPONENTS ====================
+components:
+  parameters:
+    ServiceAppParam:
+      name: app
+      in: path
+      required: true
+      schema:
+        type: string
+        enum: [manager, frontdesk, room_service]
+      description: Application context (determines permissions)
+
+    ServiceCategoryIdParam:
+      name: categoryId
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: '^[0-9a-fA-F]{24}$'
+      description: Service Category ID (MongoDB ObjectId)
+
+    ServiceIdParam:
+      name: serviceId
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: '^[0-9a-fA-F]{24}$'
+      description: Service ID (MongoDB ObjectId)
+
+  schemas:
+    # ==================== ERROR SCHEMA ====================
+    ServiceError:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        message:
+          type: string
+          example: "Error message"
+
+    # ==================== PAGINATION SCHEMA ====================
+    ServicePagination:
+      type: object
+      properties:
+        total:
+          type: integer
+          example: 100
+        page:
+          type: integer
+          example: 1
+        limit:
+          type: integer
+          example: 20
+        totalPages:
+          type: integer
+          example: 5
+
+    # ==================== AVAILABILITY SCHEMA ====================
+    ServiceAvailability:
+      type: object
+      properties:
+        days:
+          type: array
+          items:
+            type: integer
+            minimum: 0
+            maximum: 6
+          example: [1, 2, 3, 4, 5]
+          description: Days of week (0=Sunday, 6=Saturday)
+        startTime:
+          type: string
+          pattern: '^([01]\d|2[0-3]):([0-5]\d)$'
+          example: "09:00"
+        endTime:
+          type: string
+          pattern: '^([01]\d|2[0-3]):([0-5]\d)$'
+          example: "18:00"
+
+    # ==================== CATEGORY SCHEMAS ====================
+    ServiceCategory:
+      type: object
+      properties:
+        _id:
+          type: string
+          example: "507f1f77bcf86cd799439011"
+        hotelId:
+          type: string
+        name:
+          type: string
+          example: "Housekeeping"
+        description:
+          type: string
+          example: "Room cleaning and maintenance services"
+        image:
+          type: object
+          nullable: true
+          properties:
+            _id:
+              type: string
+            url:
+              type: string
+            type:
+              type: string
+        sortOrder:
+          type: integer
+          example: 1
+        isActive:
+          type: boolean
+          example: true
+        availability:
+          $ref: "#/components/schemas/ServiceAvailability"
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CreateServiceCategoryInput:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+          example: "Housekeeping"
+        description:
+          type: string
+          maxLength: 500
+          example: "Room cleaning and maintenance services"
+        image:
+          type: string
+          pattern: '^[0-9a-fA-F]{24}$'
+          description: Attachment ID
+        sortOrder:
+          type: integer
+          minimum: 0
+          default: 0
+        availability:
+          $ref: "#/components/schemas/ServiceAvailability"
+
+    UpdateServiceCategoryInput:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        description:
+          type: string
+          maxLength: 500
+          nullable: true
+        image:
+          type: string
+          pattern: '^[0-9a-fA-F]{24}$'
+          nullable: true
+        sortOrder:
+          type: integer
+          minimum: 0
+        isActive:
+          type: boolean
+        availability:
+          $ref: "#/components/schemas/ServiceAvailability"
+
+    # ==================== SERVICE SCHEMAS ====================
+    Service:
+      type: object
+      properties:
+        _id:
+          type: string
+        hotelId:
+          type: string
+        categoryId:
+          type: string
+        name:
+          type: string
+          example: "Room Cleaning"
+        description:
+          type: string
+          nullable: true
+          example: "Complete room cleaning service"
+        image:
+          type: object
+          nullable: true
+          properties:
+            _id:
+              type: string
+            url:
+              type: string
+            type:
+              type: string
+        shortCode:
+          type: string
+          example: "RC"
+        sortOrder:
+          type: integer
+        price:
+          type: number
+          example: 0
+          description: Price in INR (0 for complimentary)
+        estimatedTimeMinutes:
+          type: integer
+          example: 30
+          nullable: true
+        isActive:
+          type: boolean
+        availability:
+          $ref: "#/components/schemas/ServiceAvailability"
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CreateServiceInput:
+      type: object
+      required:
+        - name
+        - shortCode
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+          example: "Room Cleaning"
+        description:
+          type: string
+          maxLength: 500
+        image:
+          type: string
+          pattern: '^[0-9a-fA-F]{24}$'
+          description: Attachment ID
+        shortCode:
+          type: string
+          minLength: 1
+          maxLength: 10
+          example: "RC"
+        sortOrder:
+          type: integer
+          minimum: 0
+          default: 0
+        price:
+          type: number
+          minimum: 0
+          default: 0
+          description: Price in INR (0 for complimentary)
+        estimatedTimeMinutes:
+          type: integer
+          minimum: 1
+          description: Estimated time to complete in minutes
+        availability:
+          $ref: "#/components/schemas/ServiceAvailability"
+
+    UpdateServiceInput:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        description:
+          type: string
+          maxLength: 500
+          nullable: true
+        image:
+          type: string
+          pattern: '^[0-9a-fA-F]{24}$'
+          nullable: true
+        shortCode:
+          type: string
+          minLength: 1
+          maxLength: 10
+        sortOrder:
+          type: integer
+          minimum: 0
+        price:
+          type: number
+          minimum: 0
+        estimatedTimeMinutes:
+          type: integer
+          minimum: 1
+          nullable: true
+        isActive:
+          type: boolean
+        availability:
+          $ref: "#/components/schemas/ServiceAvailability"
+
+    # ==================== FULL CATALOG SCHEMAS ====================
+    ServiceCategoryWithServices:
+      allOf:
+        - $ref: "#/components/schemas/ServiceCategory"
+        - type: object
+          properties:
+            services:
+              type: array
+              items:
+                $ref: "#/components/schemas/Service"
+
+    FullServiceCatalog:
+      type: object
+      properties:
+        hotelId:
+          type: string
+          example: "507f1f77bcf86cd799439011"
+        categories:
+          type: array
+          items:
+            $ref: "#/components/schemas/ServiceCategoryWithServices"
+        totalCategories:
+          type: integer
+          example: 5
+        totalServices:
+          type: integer
+          example: 25

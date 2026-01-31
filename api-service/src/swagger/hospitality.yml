@@ -1,0 +1,1237 @@
+paths:
+  # ==================== CHAIN ENDPOINTS ====================
+  /api/v1/{app}/hospitality/chains:
+    get:
+      tags:
+        - Hospitality - Chains
+      summary: List all chains
+      description: Get paginated list of chains. Sales can view all chains.
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/AppParam"
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: search
+          in: query
+          schema:
+            type: string
+          description: Search by chain name
+        - name: isActive
+          in: query
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: List of chains
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      chains:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/ChainListItem"
+                      total:
+                        type: integer
+                      page:
+                        type: integer
+                      limit:
+                        type: integer
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Forbidden - Insufficient permissions
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+    post:
+      tags:
+        - Hospitality - Chains
+      summary: Onboard new chain with founder
+      description: |
+        Sales onboards a new chain along with founder details.
+        - If founder phone exists: Creates ChainMembership + UserRole for existing founder
+        - If founder NOT exists: Creates User + Founder profile + Chain + Membership + UserRole
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/AppParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OnboardChainInput"
+      responses:
+        "201":
+          description: Chain onboarded successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "Chain onboarded successfully"
+                  data:
+                    $ref: "#/components/schemas/OnboardChainResult"
+        "400":
+          description: Bad request - Chain name exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/v1/{app}/hospitality/chains/new:
+    post:
+      tags:
+        - Hospitality - Chains
+      summary: Founder creates new chain
+      description: Existing founder creates a new chain (they become OWNER of the new chain)
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/AppParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateChainInput"
+      responses:
+        "201":
+          description: Chain created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "Chain created successfully"
+                  data:
+                    type: object
+                    properties:
+                      chainId:
+                        type: string
+                        example: "507f1f77bcf86cd799439011"
+        "400":
+          description: Chain name already exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/v1/{app}/hospitality/chains/{chainId}:
+    get:
+      tags:
+        - Hospitality - Chains
+      summary: Get chain by ID
+      description: Get detailed chain information including hotel and founder counts
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/AppParam"
+        - $ref: "#/components/parameters/ChainIdParam"
+      responses:
+        "200":
+          description: Chain details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: "#/components/schemas/ChainDetail"
+        "404":
+          description: Chain not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  # ==================== CHAIN MEMBER ENDPOINTS ====================
+  /api/v1/{app}/hospitality/chains/{chainId}/members:
+    get:
+      tags:
+        - Hospitality - Chain Members
+      summary: Get chain members
+      description: List all founders/co-owners/directors/partners of a chain
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/AppParam"
+        - $ref: "#/components/parameters/ChainIdParam"
+      responses:
+        "200":
+          description: List of chain members
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      members:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/ChainMember"
+        "403":
+          description: No access to this chain
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+    post:
+      tags:
+        - Hospitality - Chain Members
+      summary: Add chain member
+      description: |
+        Founder adds a new member (CO_OWNER, DIRECTOR, or PARTNER) to the chain.
+        - If phone exists: Adds them to chain with specified role
+        - If phone NOT exists: Creates user + founder profile + membership
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/AppParam"
+        - $ref: "#/components/parameters/ChainIdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddChainMemberInput"
+      responses:
+        "201":
+          description: Member added successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "Member added successfully"
+                  data:
+                    $ref: "#/components/schemas/AddMemberResult"
+        "400":
+          description: Person is already a member of this chain
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: No access to this chain
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  # ==================== HOTEL ENDPOINTS ====================
+  /api/v1/{app}/hospitality/chains/{chainId}/hotels:
+    post:
+      tags:
+        - Hospitality - Hotels
+      summary: Onboard hotel under chain (Sales)
+      description: |
+        Sales onboards a hotel under a specific chain with first manager.
+        - Creates hotel with unique slug
+        - Creates manager user if not exists
+        - Assigns MANAGER role with HOTEL context
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/AppParam"
+        - $ref: "#/components/parameters/ChainIdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OnboardHotelInput"
+      responses:
+        "201":
+          description: Hotel onboarded successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "Hotel onboarded successfully"
+                  data:
+                    $ref: "#/components/schemas/OnboardHotelResult"
+        "400":
+          description: Chain not found or manager already exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/v1/{app}/hospitality/hotels:
+    get:
+      tags:
+        - Hospitality - Hotels
+      summary: List all hotels
+      description: Get paginated list of all hotels (Sales/Admin view)
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/AppParam"
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: search
+          in: query
+          schema:
+            type: string
+          description: Search by hotel name or city
+        - name: chainId
+          in: query
+          schema:
+            type: string
+            pattern: '^[0-9a-fA-F]{24}$'
+          description: Filter by chain ID
+        - name: city
+          in: query
+          schema:
+            type: string
+          description: Filter by city
+        - name: isActive
+          in: query
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: List of hotels
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      hotels:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/HotelListItem"
+                      total:
+                        type: integer
+                      page:
+                        type: integer
+                      limit:
+                        type: integer
+
+    post:
+      tags:
+        - Hospitality - Hotels
+      summary: Founder onboards hotel
+      description: |
+        Founder onboards a hotel under one of their chains.
+        Chain ID is provided in request body (founder must have access).
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/AppParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FounderOnboardHotelInput"
+      responses:
+        "201":
+          description: Hotel onboarded successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "Hotel onboarded successfully"
+                  data:
+                    $ref: "#/components/schemas/OnboardHotelResult"
+        "403":
+          description: No access to the specified chain
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/v1/{app}/hospitality/my-hotels:
+    get:
+      tags:
+        - Hospitality - Hotels
+      summary: Get founder's hotels
+      description: Get hotels for founder's current chain context (from JWT)
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/AppParam"
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: search
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Founder's hotels
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      hotels:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/HotelListItem"
+                      total:
+                        type: integer
+                      page:
+                        type: integer
+                      limit:
+                        type: integer
+        "400":
+          description: No chain context found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/v1/{app}/hospitality/hotels/{hotelId}:
+    get:
+      tags:
+        - Hospitality - Hotels
+      summary: Get hotel by ID
+      description: Get detailed hotel information including manager and staff count
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/AppParam"
+        - $ref: "#/components/parameters/HotelIdParam"
+      responses:
+        "200":
+          description: Hotel details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: "#/components/schemas/HotelDetail"
+        "404":
+          description: Hotel not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  # ==================== STAFF ENDPOINTS ====================
+  /api/v1/{app}/hospitality/hotels/{hotelId}/staff:
+    get:
+      tags:
+        - Hospitality - Staff
+      summary: Get hotel staff
+      description: Get paginated list of staff for a specific hotel
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/AppParam"
+        - $ref: "#/components/parameters/HotelIdParam"
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: search
+          in: query
+          schema:
+            type: string
+          description: Search by name
+        - name: designation
+          in: query
+          schema:
+            type: string
+            enum: [MANAGER, FRONTDESK, KITCHEN, ROOM_SERVICE, HOUSEKEEPING]
+      responses:
+        "200":
+          description: List of staff
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      staff:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/StaffListItem"
+                      total:
+                        type: integer
+                      page:
+                        type: integer
+                      limit:
+                        type: integer
+
+    post:
+      tags:
+        - Hospitality - Staff
+      summary: Onboard staff
+      description: |
+        Onboard new staff member to a hotel.
+        Can be done by: Sales, Founder, Manager
+        - Creates user if not exists
+        - Creates HotelStaff profile with auto-generated employee code
+        - Assigns role with HOTEL context
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/AppParam"
+        - $ref: "#/components/parameters/HotelIdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OnboardStaffInput"
+      responses:
+        "201":
+          description: Staff onboarded successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "Staff onboarded successfully"
+                  data:
+                    $ref: "#/components/schemas/OnboardStaffResult"
+        "400":
+          description: Phone already registered as hotel staff
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+# ==================== COMPONENTS ====================
+components:
+  parameters:
+    AppParam:
+      name: app
+      in: path
+      required: true
+      schema:
+        type: string
+        enum: [admin, sales, founder, manager]
+      description: Application context (determines permissions)
+
+    ChainIdParam:
+      name: chainId
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: '^[0-9a-fA-F]{24}$'
+      description: Chain ID (MongoDB ObjectId)
+
+    HotelIdParam:
+      name: hotelId
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: '^[0-9a-fA-F]{24}$'
+      description: Hotel ID (MongoDB ObjectId)
+
+  schemas:
+    # ==================== CHAIN SCHEMAS ====================
+    ChainListItem:
+      type: object
+      properties:
+        _id:
+          type: string
+          example: "507f1f77bcf86cd799439011"
+        name:
+          type: string
+          example: "Taj Hotels"
+        logo:
+          type: string
+          nullable: true
+        description:
+          type: string
+          nullable: true
+        hotelCount:
+          type: integer
+          example: 5
+        founderCount:
+          type: integer
+          example: 2
+        createdAt:
+          type: string
+          format: date-time
+
+    ChainDetail:
+      type: object
+      properties:
+        _id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        logo:
+          type: object
+          nullable: true
+          properties:
+            url:
+              type: string
+            type:
+              type: string
+        settings:
+          type: object
+          properties:
+            currency:
+              type: string
+              example: "INR"
+            timezone:
+              type: string
+              example: "Asia/Kolkata"
+            supportEmail:
+              type: string
+            supportPhone:
+              type: string
+        subscription:
+          type: object
+          properties:
+            plan:
+              type: string
+              enum: [STARTER, GROWTH, ENTERPRISE]
+            validTill:
+              type: string
+              format: date-time
+            features:
+              type: array
+              items:
+                type: string
+        hotelCount:
+          type: integer
+        founderCount:
+          type: integer
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+
+    OnboardChainInput:
+      type: object
+      required:
+        - name
+        - founderPhone
+        - founderName
+      properties:
+        name:
+          type: string
+          minLength: 2
+          maxLength: 100
+          example: "Taj Hotels"
+        description:
+          type: string
+          maxLength: 500
+          example: "Premium luxury hotel chain"
+        founderPhone:
+          type: string
+          pattern: '^\+?[1-9]\d{1,14}$'
+          example: "+919876543210"
+        founderName:
+          type: string
+          minLength: 2
+          maxLength: 100
+          example: "Ratan Tata"
+        founderEmail:
+          type: string
+          format: email
+          example: "ratan@tajhotels.com"
+        founderDesignation:
+          type: string
+          maxLength: 50
+          example: "Chairman"
+        settings:
+          type: object
+          properties:
+            currency:
+              type: string
+              default: "INR"
+            timezone:
+              type: string
+              default: "Asia/Kolkata"
+            supportEmail:
+              type: string
+              format: email
+            supportPhone:
+              type: string
+
+    CreateChainInput:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          minLength: 2
+          maxLength: 100
+          example: "New Chain"
+        description:
+          type: string
+          maxLength: 500
+        settings:
+          type: object
+          properties:
+            currency:
+              type: string
+              default: "INR"
+            timezone:
+              type: string
+              default: "Asia/Kolkata"
+
+    OnboardChainResult:
+      type: object
+      properties:
+        chainId:
+          type: string
+          example: "507f1f77bcf86cd799439011"
+        founderId:
+          type: string
+          example: "507f1f77bcf86cd799439012"
+        founderUserId:
+          type: string
+          example: "507f1f77bcf86cd799439013"
+        isNewFounder:
+          type: boolean
+          example: true
+
+    # ==================== CHAIN MEMBER SCHEMAS ====================
+    ChainMember:
+      type: object
+      properties:
+        _id:
+          type: string
+        founderId:
+          type: string
+        founderName:
+          type: string
+          example: "Ratan Tata"
+        founderEmail:
+          type: string
+          example: "ratan@tajhotels.com"
+        founderPhone:
+          type: string
+          example: "+919876543210"
+        role:
+          type: string
+          enum: [OWNER, CO_OWNER, DIRECTOR, PARTNER]
+        joinedAt:
+          type: string
+          format: date-time
+        isActive:
+          type: boolean
+
+    AddChainMemberInput:
+      type: object
+      required:
+        - phone
+        - name
+        - role
+      properties:
+        phone:
+          type: string
+          pattern: '^\+?[1-9]\d{1,14}$'
+          example: "+919876543211"
+        name:
+          type: string
+          minLength: 2
+          maxLength: 100
+          example: "John Doe"
+        email:
+          type: string
+          format: email
+          example: "john@tajhotels.com"
+        designation:
+          type: string
+          maxLength: 50
+          example: "Director"
+        role:
+          type: string
+          enum: [CO_OWNER, DIRECTOR, PARTNER]
+          example: "CO_OWNER"
+
+    AddMemberResult:
+      type: object
+      properties:
+        founderId:
+          type: string
+        membershipId:
+          type: string
+        isNewFounder:
+          type: boolean
+
+    # ==================== HOTEL SCHEMAS ====================
+    HotelListItem:
+      type: object
+      properties:
+        _id:
+          type: string
+        name:
+          type: string
+          example: "Taj Mahal Palace"
+        slug:
+          type: string
+          example: "taj-mahal-palace"
+        logo:
+          type: string
+          nullable: true
+        chainId:
+          type: string
+        chainName:
+          type: string
+          example: "Taj Hotels"
+        city:
+          type: string
+          example: "Mumbai"
+        state:
+          type: string
+          example: "Maharashtra"
+        managerName:
+          type: string
+          nullable: true
+          example: "Amit Kumar"
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+
+    HotelDetail:
+      type: object
+      properties:
+        _id:
+          type: string
+        chainId:
+          type: object
+          properties:
+            _id:
+              type: string
+            name:
+              type: string
+            logo:
+              type: object
+              nullable: true
+        name:
+          type: string
+        slug:
+          type: string
+        description:
+          type: string
+        logo:
+          type: object
+          nullable: true
+        address:
+          type: object
+          properties:
+            street:
+              type: string
+            city:
+              type: string
+            state:
+              type: string
+            country:
+              type: string
+            pincode:
+              type: string
+            coordinates:
+              type: object
+              properties:
+                lat:
+                  type: number
+                lng:
+                  type: number
+        contact:
+          type: object
+          properties:
+            phone:
+              type: string
+            email:
+              type: string
+            website:
+              type: string
+        settings:
+          type: object
+          properties:
+            currency:
+              type: string
+            timezone:
+              type: string
+            checkInTime:
+              type: string
+            checkOutTime:
+              type: string
+        panelSettings:
+          type: object
+          properties:
+            kitchenEnabled:
+              type: boolean
+            roomServiceEnabled:
+              type: boolean
+            kitchenOfflineRedirect:
+              type: string
+              enum: [FRONTDESK, ROOM_SERVICE]
+        totalRooms:
+          type: integer
+        manager:
+          type: object
+          nullable: true
+          properties:
+            name:
+              type: string
+            email:
+              type: string
+            phone:
+              type: string
+            employeeCode:
+              type: string
+        staffCount:
+          type: integer
+        isActive:
+          type: boolean
+
+    OnboardHotelInput:
+      type: object
+      required:
+        - name
+        - address
+        - contact
+        - managerPhone
+        - managerName
+      properties:
+        name:
+          type: string
+          minLength: 2
+          maxLength: 100
+          example: "Taj Mahal Palace"
+        description:
+          type: string
+          maxLength: 500
+        address:
+          type: object
+          required:
+            - city
+            - state
+            - pincode
+          properties:
+            street:
+              type: string
+              maxLength: 200
+              example: "Apollo Bunder"
+            city:
+              type: string
+              minLength: 2
+              maxLength: 100
+              example: "Mumbai"
+            state:
+              type: string
+              minLength: 2
+              maxLength: 100
+              example: "Maharashtra"
+            country:
+              type: string
+              default: "India"
+            pincode:
+              type: string
+              minLength: 4
+              maxLength: 10
+              example: "400001"
+            coordinates:
+              type: object
+              properties:
+                lat:
+                  type: number
+                lng:
+                  type: number
+        contact:
+          type: object
+          required:
+            - phone
+            - email
+          properties:
+            phone:
+              type: string
+              pattern: '^\+?[1-9]\d{1,14}$'
+              example: "+912222836363"
+            email:
+              type: string
+              format: email
+              example: "info@tajpalace.com"
+            website:
+              type: string
+              format: uri
+              example: "https://www.tajpalace.com"
+        managerPhone:
+          type: string
+          pattern: '^\+?[1-9]\d{1,14}$'
+          example: "+919876543220"
+        managerName:
+          type: string
+          minLength: 2
+          maxLength: 100
+          example: "Amit Kumar"
+        managerEmail:
+          type: string
+          format: email
+          example: "amit@tajpalace.com"
+        totalRooms:
+          type: integer
+          minimum: 1
+          example: 285
+        settings:
+          type: object
+          properties:
+            currency:
+              type: string
+              default: "INR"
+            timezone:
+              type: string
+              default: "Asia/Kolkata"
+            checkInTime:
+              type: string
+              default: "14:00"
+            checkOutTime:
+              type: string
+              default: "11:00"
+        panelSettings:
+          type: object
+          properties:
+            kitchenEnabled:
+              type: boolean
+              default: true
+            roomServiceEnabled:
+              type: boolean
+              default: true
+            kitchenOfflineRedirect:
+              type: string
+              enum: [FRONTDESK, ROOM_SERVICE]
+              default: "FRONTDESK"
+
+    FounderOnboardHotelInput:
+      allOf:
+        - type: object
+          required:
+            - chainId
+          properties:
+            chainId:
+              type: string
+              pattern: '^[0-9a-fA-F]{24}$'
+              example: "507f1f77bcf86cd799439011"
+              description: Chain ID (must be one of founder's chains)
+        - $ref: "#/components/schemas/OnboardHotelInput"
+
+    OnboardHotelResult:
+      type: object
+      properties:
+        hotelId:
+          type: string
+          example: "507f1f77bcf86cd799439020"
+        managerId:
+          type: string
+          example: "507f1f77bcf86cd799439021"
+        managerUserId:
+          type: string
+          example: "507f1f77bcf86cd799439022"
+        isNewManager:
+          type: boolean
+          example: true
+
+    # ==================== STAFF SCHEMAS ====================
+    StaffListItem:
+      type: object
+      properties:
+        _id:
+          type: string
+        name:
+          type: string
+          example: "Amit Kumar"
+        email:
+          type: string
+          nullable: true
+          example: "amit@hotel.com"
+        employeeCode:
+          type: string
+          example: "TMH-00001"
+        designation:
+          type: string
+          enum: [MANAGER, FRONTDESK, KITCHEN, ROOM_SERVICE, HOUSEKEEPING]
+        hotelId:
+          type: string
+        hotelName:
+          type: string
+        isActive:
+          type: boolean
+        joinedAt:
+          type: string
+          format: date-time
+
+    OnboardStaffInput:
+      type: object
+      required:
+        - phone
+        - name
+        - designation
+      properties:
+        phone:
+          type: string
+          pattern: '^\+?[1-9]\d{1,14}$'
+          example: "+919876543230"
+        name:
+          type: string
+          minLength: 2
+          maxLength: 100
+          example: "Ramesh Singh"
+        email:
+          type: string
+          format: email
+          example: "ramesh@hotel.com"
+        designation:
+          type: string
+          enum: [FRONTDESK, KITCHEN, ROOM_SERVICE, HOUSEKEEPING]
+          example: "FRONTDESK"
+          description: Staff designation (MANAGER is only assigned during hotel onboarding)
+
+    OnboardStaffResult:
+      type: object
+      properties:
+        staffId:
+          type: string
+          example: "507f1f77bcf86cd799439030"
+        userId:
+          type: string
+          example: "507f1f77bcf86cd799439031"
+        employeeCode:
+          type: string
+          example: "TMH-00005"
+        isNewUser:
+          type: boolean
+          example: true

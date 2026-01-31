@@ -1,0 +1,554 @@
+paths:
+  # ==================== ROLES ====================
+  /api/v1/{app}/admin/roles:
+    get:
+      tags:
+        - Admin - Roles
+      summary: Get all roles
+      description: Returns paginated list of roles with their permissions
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/AppParam"
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+          description: Page number
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+          description: Items per page
+        - name: search
+          in: query
+          schema:
+            type: string
+          description: Search by role key
+      responses:
+        "200":
+          description: List of roles
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/RoleWithPermissions"
+                  pagination:
+                    $ref: "#/components/schemas/Pagination"
+        "401":
+          description: Unauthorized
+        "403":
+          description: Forbidden - requires MANAGE_ROLES permission
+
+    post:
+      tags:
+        - Admin - Roles
+      summary: Create a new role
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/AppParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateRole"
+      responses:
+        "201":
+          description: Role created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: "#/components/schemas/RoleWithPermissions"
+        "400":
+          description: Role already exists
+        "401":
+          description: Unauthorized
+        "403":
+          description: Forbidden
+
+  /api/v1/{app}/admin/roles/{id}:
+    get:
+      tags:
+        - Admin - Roles
+      summary: Get role by ID
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/AppParam"
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Role ID (MongoDB ObjectId)
+      responses:
+        "200":
+          description: Role details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: "#/components/schemas/RoleWithPermissions"
+        "404":
+          description: Role not found
+
+    patch:
+      tags:
+        - Admin - Roles
+      summary: Update a role
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/AppParam"
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateRole"
+      responses:
+        "200":
+          description: Role updated
+        "400":
+          description: Bad request
+        "404":
+          description: Role not found
+
+    delete:
+      tags:
+        - Admin - Roles
+      summary: Delete a role (soft delete)
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/AppParam"
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Role deleted
+        "404":
+          description: Role not found
+
+  # ==================== PERMISSIONS ====================
+  /api/v1/{app}/admin/permissions:
+    get:
+      tags:
+        - Admin - Permissions
+      summary: Get all permissions
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/AppParam"
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+        - name: search
+          in: query
+          schema:
+            type: string
+          description: Search by key or description
+      responses:
+        "200":
+          description: List of permissions
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Permission"
+                  pagination:
+                    $ref: "#/components/schemas/Pagination"
+
+    post:
+      tags:
+        - Admin - Permissions
+      summary: Create a new permission
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/AppParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatePermission"
+      responses:
+        "201":
+          description: Permission created
+        "400":
+          description: Permission already exists
+
+  /api/v1/{app}/admin/permissions/{id}:
+    get:
+      tags:
+        - Admin - Permissions
+      summary: Get permission by ID
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/AppParam"
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Permission details
+        "404":
+          description: Permission not found
+
+    patch:
+      tags:
+        - Admin - Permissions
+      summary: Update a permission
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/AppParam"
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdatePermission"
+      responses:
+        "200":
+          description: Permission updated
+        "404":
+          description: Permission not found
+
+    delete:
+      tags:
+        - Admin - Permissions
+      summary: Delete a permission (soft delete)
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/AppParam"
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Permission deleted
+        "404":
+          description: Permission not found
+
+  # ==================== ROLE-PERMISSION ASSIGNMENT ====================
+  /api/v1/{app}/admin/roles/{roleId}/permissions:
+    post:
+      tags:
+        - Admin - Roles
+      summary: Assign permissions to a role
+      description: Add multiple permissions to a role (existing ones are skipped)
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/AppParam"
+        - name: roleId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - permissionIds
+              properties:
+                permissionIds:
+                  type: array
+                  items:
+                    type: string
+                  example: ["507f1f77bcf86cd799439011", "507f1f77bcf86cd799439012"]
+      responses:
+        "200":
+          description: Permissions assigned
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "3 permissions assigned to role"
+        "400":
+          description: Role not found or no valid permissions
+
+    put:
+      tags:
+        - Admin - Roles
+      summary: Sync role permissions
+      description: Replace all role permissions with the provided list (adds new, removes old)
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/AppParam"
+        - name: roleId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - permissionIds
+              properties:
+                permissionIds:
+                  type: array
+                  items:
+                    type: string
+                  description: Full list of permission IDs for this role
+      responses:
+        "200":
+          description: Permissions synced
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "Permissions synced: 2 added, 1 removed"
+
+  /api/v1/{app}/admin/roles/{roleId}/permissions/{permissionId}:
+    delete:
+      tags:
+        - Admin - Roles
+      summary: Remove permission from role
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/AppParam"
+        - name: roleId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: permissionId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Permission removed from role
+        "400":
+          description: Permission not assigned to this role
+
+components:
+  parameters:
+    AppParam:
+      name: app
+      in: path
+      required: true
+      schema:
+        type: string
+        enum: [admin, founder, customer-care, sales, manager, frontdesk, kitchen, room-service, customer]
+      description: Application/panel type
+
+  schemas:
+    Pagination:
+      type: object
+      properties:
+        total:
+          type: integer
+          example: 100
+        page:
+          type: integer
+          example: 1
+        limit:
+          type: integer
+          example: 20
+        totalPages:
+          type: integer
+          example: 5
+
+    Role:
+      type: object
+      properties:
+        _id:
+          type: string
+          example: "507f1f77bcf86cd799439011"
+        key:
+          type: string
+          example: "MANAGER"
+        scope:
+          type: string
+          enum: [GLOBAL, CHAIN, HOTEL]
+          example: "HOTEL"
+        level:
+          type: integer
+          example: 60
+        isActive:
+          type: boolean
+          example: true
+
+    RoleWithPermissions:
+      allOf:
+        - $ref: "#/components/schemas/Role"
+        - type: object
+          properties:
+            permissions:
+              type: array
+              items:
+                $ref: "#/components/schemas/Permission"
+
+    Permission:
+      type: object
+      properties:
+        _id:
+          type: string
+          example: "507f1f77bcf86cd799439012"
+        key:
+          type: string
+          example: "VIEW_ORDER"
+        description:
+          type: string
+          example: "View orders"
+        isActive:
+          type: boolean
+          example: true
+
+    CreateRole:
+      type: object
+      required:
+        - key
+        - scope
+        - level
+      properties:
+        key:
+          type: string
+          pattern: "^[A-Z_]+$"
+          example: "SUPERVISOR"
+          description: Uppercase letters and underscores only
+        scope:
+          type: string
+          enum: [GLOBAL, CHAIN, HOTEL]
+          example: "HOTEL"
+        level:
+          type: integer
+          minimum: 1
+          maximum: 100
+          example: 55
+
+    UpdateRole:
+      type: object
+      properties:
+        key:
+          type: string
+          pattern: "^[A-Z_]+$"
+        scope:
+          type: string
+          enum: [GLOBAL, CHAIN, HOTEL]
+        level:
+          type: integer
+          minimum: 1
+          maximum: 100
+
+    CreatePermission:
+      type: object
+      required:
+        - key
+        - description
+      properties:
+        key:
+          type: string
+          pattern: "^[A-Z_]+$"
+          example: "MANAGE_INVENTORY"
+        description:
+          type: string
+          minLength: 5
+          maxLength: 500
+          example: "Manage hotel inventory"
+
+    UpdatePermission:
+      type: object
+      properties:
+        key:
+          type: string
+          pattern: "^[A-Z_]+$"
+        description:
+          type: string
+          minLength: 5
+          maxLength: 500

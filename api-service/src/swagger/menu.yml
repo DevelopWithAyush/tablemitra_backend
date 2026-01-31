@@ -1,0 +1,901 @@
+paths:
+  # ==================== CATEGORY ENDPOINTS ====================
+  /api/v1/{app}/menu/categories:
+    get:
+      tags:
+        - Menu - Categories
+      summary: Get all categories
+      description: Get paginated list of categories for the hotel (from JWT context)
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/AppParam"
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: search
+          in: query
+          schema:
+            type: string
+          description: Search by name or description
+        - name: isActive
+          in: query
+          schema:
+            type: boolean
+          description: Filter by active status
+      responses:
+        "200":
+          description: List of categories
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Category"
+                  pagination:
+                    $ref: "#/components/schemas/MenuPagination"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MenuError"
+        "403":
+          description: Forbidden - Insufficient permissions
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MenuError"
+
+    post:
+      tags:
+        - Menu - Categories
+      summary: Create a new category
+      description: Create a new menu category for the hotel
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/AppParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCategoryInput"
+      responses:
+        "201":
+          description: Category created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "Category created successfully"
+                  data:
+                    $ref: "#/components/schemas/Category"
+        "400":
+          description: Bad request - Category name exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MenuError"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MenuError"
+
+  /api/v1/{app}/menu/categories/{categoryId}/toggle:
+    put:
+      tags:
+        - Menu - Categories
+      summary: Toggle category active status
+      description: Activate or deactivate a category
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/AppParam"
+        - $ref: "#/components/parameters/CategoryIdParam"
+      responses:
+        "200":
+          description: Category toggled successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "Category activated successfully"
+                  data:
+                    type: object
+                    properties:
+                      isActive:
+                        type: boolean
+        "404":
+          description: Category not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MenuError"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MenuError"
+
+  # ==================== ITEM ENDPOINTS ====================
+  /api/v1/{app}/menu/categories/{categoryId}/items:
+    get:
+      tags:
+        - Menu - Items
+      summary: Get items in a category
+      description: Get paginated list of items in a specific category
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/AppParam"
+        - $ref: "#/components/parameters/CategoryIdParam"
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: search
+          in: query
+          schema:
+            type: string
+          description: Search by name, description, or short code
+        - name: isActive
+          in: query
+          schema:
+            type: boolean
+        - name: type
+          in: query
+          schema:
+            type: string
+            enum: [veg, non-veg, egg]
+        - name: isPopular
+          in: query
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: List of items
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Item"
+                  pagination:
+                    $ref: "#/components/schemas/MenuPagination"
+        "404":
+          description: Category not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MenuError"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MenuError"
+
+    post:
+      tags:
+        - Menu - Items
+      summary: Create a new item
+      description: |
+        Create a new menu item with optional variants.
+        - If variants are provided, price field is ignored
+        - If no variants, price is required
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/AppParam"
+        - $ref: "#/components/parameters/CategoryIdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateItemInput"
+      responses:
+        "201":
+          description: Item created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "Item created successfully"
+                  data:
+                    $ref: "#/components/schemas/ItemWithVariants"
+        "400":
+          description: Bad request - Short code exists or validation failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MenuError"
+        "404":
+          description: Category not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MenuError"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MenuError"
+
+  /api/v1/{app}/menu/items/{itemId}:
+    put:
+      tags:
+        - Menu - Items
+      summary: Update an item
+      description: Update an existing menu item and its variants
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/AppParam"
+        - $ref: "#/components/parameters/ItemIdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateItemInput"
+      responses:
+        "200":
+          description: Item updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "Item updated successfully"
+                  data:
+                    $ref: "#/components/schemas/ItemWithVariants"
+        "400":
+          description: Bad request - Validation failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MenuError"
+        "404":
+          description: Item not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MenuError"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MenuError"
+
+  /api/v1/{app}/menu/items/{itemId}/toggle:
+    put:
+      tags:
+        - Menu - Items
+      summary: Toggle item active status
+      description: Activate or deactivate an item
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/AppParam"
+        - $ref: "#/components/parameters/ItemIdParam"
+      responses:
+        "200":
+          description: Item toggled successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "Item activated successfully"
+                  data:
+                    type: object
+                    properties:
+                      isActive:
+                        type: boolean
+        "404":
+          description: Item not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MenuError"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MenuError"
+
+  # ==================== VARIANT ENDPOINTS ====================
+  /api/v1/{app}/menu/items/{itemId}/variants:
+    get:
+      tags:
+        - Menu - Variants
+      summary: Get variants for an item
+      description: Get all variants of a specific item
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/AppParam"
+        - $ref: "#/components/parameters/ItemIdParam"
+      responses:
+        "200":
+          description: List of variants
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Variant"
+        "404":
+          description: Item not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MenuError"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MenuError"
+
+  # ==================== FULL MENU ENDPOINTS ====================
+  /api/v1/{app}/menu/menu-items:
+    get:
+      tags:
+        - Menu - Full Menu
+      summary: Get full menu
+      description: Get complete menu with nested categories, items, and variants
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/AppParam"
+        - name: includeInactive
+          in: query
+          schema:
+            type: boolean
+            default: false
+          description: Include inactive items and categories
+      responses:
+        "200":
+          description: Full menu data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: "#/components/schemas/FullMenu"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MenuError"
+
+# ==================== COMPONENTS ====================
+components:
+  parameters:
+    AppParam:
+      name: app
+      in: path
+      required: true
+      schema:
+        type: string
+        enum: [manager, frontdesk, kitchen]
+      description: Application context (determines permissions)
+
+    CategoryIdParam:
+      name: categoryId
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: '^[0-9a-fA-F]{24}$'
+      description: Category ID (MongoDB ObjectId)
+
+    ItemIdParam:
+      name: itemId
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: '^[0-9a-fA-F]{24}$'
+      description: Item ID (MongoDB ObjectId)
+
+  schemas:
+    # ==================== ERROR SCHEMA ====================
+    MenuError:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        message:
+          type: string
+          example: "Error message"
+
+    # ==================== PAGINATION SCHEMA ====================
+    MenuPagination:
+      type: object
+      properties:
+        total:
+          type: integer
+          example: 100
+        page:
+          type: integer
+          example: 1
+        limit:
+          type: integer
+          example: 20
+        totalPages:
+          type: integer
+          example: 5
+
+    # ==================== AVAILABILITY SCHEMA ====================
+    Availability:
+      type: object
+      properties:
+        days:
+          type: array
+          items:
+            type: integer
+            minimum: 0
+            maximum: 6
+          example: [1, 2, 3, 4, 5]
+          description: Days of week (0=Sunday, 6=Saturday)
+        startTime:
+          type: string
+          pattern: '^([01]\d|2[0-3]):([0-5]\d)$'
+          example: "09:00"
+        endTime:
+          type: string
+          pattern: '^([01]\d|2[0-3]):([0-5]\d)$'
+          example: "23:00"
+
+    # ==================== CATEGORY SCHEMAS ====================
+    Category:
+      type: object
+      properties:
+        _id:
+          type: string
+          example: "507f1f77bcf86cd799439011"
+        hotelId:
+          type: string
+        name:
+          type: string
+          example: "Starters"
+        description:
+          type: string
+          example: "Delicious appetizers"
+        image:
+          type: object
+          nullable: true
+          properties:
+            _id:
+              type: string
+            url:
+              type: string
+            type:
+              type: string
+        isActive:
+          type: boolean
+          example: true
+        sortOrder:
+          type: integer
+          example: 1
+        availability:
+          $ref: "#/components/schemas/Availability"
+        suggestedCategoryIds:
+          type: array
+          items:
+            type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CreateCategoryInput:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+          example: "Starters"
+        description:
+          type: string
+          maxLength: 500
+          example: "Delicious appetizers to start your meal"
+        image:
+          type: string
+          pattern: '^[0-9a-fA-F]{24}$'
+          description: Attachment ID
+        sortOrder:
+          type: integer
+          minimum: 0
+          default: 0
+        availability:
+          $ref: "#/components/schemas/Availability"
+        suggestedCategoryIds:
+          type: array
+          items:
+            type: string
+            pattern: '^[0-9a-fA-F]{24}$'
+
+    # ==================== VARIANT SCHEMAS ====================
+    Variant:
+      type: object
+      properties:
+        _id:
+          type: string
+        hotelId:
+          type: string
+        itemId:
+          type: string
+        name:
+          type: string
+          example: "Half"
+        shortCode:
+          type: string
+          example: "HF"
+        price:
+          type: number
+          example: 150
+        discountedPrice:
+          type: number
+          example: 120
+          nullable: true
+        preparationTimeMinutes:
+          type: integer
+          nullable: true
+        isActive:
+          type: boolean
+        sortOrder:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    VariantInput:
+      type: object
+      required:
+        - name
+        - shortCode
+        - price
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+          example: "Half"
+        shortCode:
+          type: string
+          minLength: 1
+          maxLength: 10
+          example: "HF"
+        price:
+          type: number
+          minimum: 0.01
+          example: 150
+        discountedPrice:
+          type: number
+          minimum: 0.01
+          example: 120
+        preparationTimeMinutes:
+          type: integer
+          minimum: 1
+        sortOrder:
+          type: integer
+          minimum: 0
+          default: 0
+
+    # ==================== ITEM SCHEMAS ====================
+    Item:
+      type: object
+      properties:
+        _id:
+          type: string
+        hotelId:
+          type: string
+        categoryId:
+          type: string
+        name:
+          type: string
+          example: "Paneer Tikka"
+        description:
+          type: string
+          nullable: true
+        image:
+          type: object
+          nullable: true
+          properties:
+            _id:
+              type: string
+            url:
+              type: string
+            type:
+              type: string
+        shortCode:
+          type: string
+          example: "PNTK"
+        sortOrder:
+          type: integer
+        type:
+          type: string
+          enum: [veg, non-veg, egg]
+        preparationTimeMinutes:
+          type: integer
+          example: 15
+        price:
+          type: number
+          example: 250
+          nullable: true
+        discountedPrice:
+          type: number
+          nullable: true
+        hasVariants:
+          type: boolean
+        minVariantPrice:
+          type: number
+          nullable: true
+        maxVariantPrice:
+          type: number
+          nullable: true
+        isPopular:
+          type: boolean
+        isActive:
+          type: boolean
+        availability:
+          $ref: "#/components/schemas/Availability"
+        suggestedItemIds:
+          type: array
+          items:
+            type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    ItemWithVariants:
+      allOf:
+        - $ref: "#/components/schemas/Item"
+        - type: object
+          properties:
+            variants:
+              type: array
+              items:
+                $ref: "#/components/schemas/Variant"
+
+    CreateItemInput:
+      type: object
+      required:
+        - name
+        - shortCode
+        - type
+        - preparationTimeMinutes
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+          example: "Paneer Tikka"
+        description:
+          type: string
+          maxLength: 500
+        image:
+          type: string
+          pattern: '^[0-9a-fA-F]{24}$'
+          description: Attachment ID
+        shortCode:
+          type: string
+          minLength: 1
+          maxLength: 10
+          example: "PNTK"
+        sortOrder:
+          type: integer
+          minimum: 0
+          default: 0
+        type:
+          type: string
+          enum: [veg, non-veg, egg]
+        preparationTimeMinutes:
+          type: integer
+          minimum: 1
+          example: 15
+        price:
+          type: number
+          minimum: 0.01
+          description: Required if no variants provided
+        discountedPrice:
+          type: number
+          minimum: 0.01
+        isPopular:
+          type: boolean
+          default: false
+        availability:
+          $ref: "#/components/schemas/Availability"
+        suggestedItemIds:
+          type: array
+          items:
+            type: string
+            pattern: '^[0-9a-fA-F]{24}$'
+        variants:
+          type: array
+          items:
+            $ref: "#/components/schemas/VariantInput"
+          description: If provided, price field is ignored
+
+    UpdateItemInput:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        description:
+          type: string
+          maxLength: 500
+          nullable: true
+        image:
+          type: string
+          pattern: '^[0-9a-fA-F]{24}$'
+          nullable: true
+        shortCode:
+          type: string
+          minLength: 1
+          maxLength: 10
+        sortOrder:
+          type: integer
+          minimum: 0
+        type:
+          type: string
+          enum: [veg, non-veg, egg]
+        preparationTimeMinutes:
+          type: integer
+          minimum: 1
+        price:
+          type: number
+          minimum: 0.01
+          nullable: true
+        discountedPrice:
+          type: number
+          minimum: 0.01
+          nullable: true
+        isPopular:
+          type: boolean
+        isActive:
+          type: boolean
+        availability:
+          $ref: "#/components/schemas/Availability"
+        suggestedItemIds:
+          type: array
+          items:
+            type: string
+            pattern: '^[0-9a-fA-F]{24}$'
+        variants:
+          type: array
+          items:
+            $ref: "#/components/schemas/VariantInput"
+
+    # ==================== FULL MENU SCHEMAS ====================
+    CategoryWithItems:
+      allOf:
+        - $ref: "#/components/schemas/Category"
+        - type: object
+          properties:
+            items:
+              type: array
+              items:
+                $ref: "#/components/schemas/ItemWithVariants"
+
+    FullMenu:
+      type: object
+      properties:
+        hotelId:
+          type: string
+          example: "507f1f77bcf86cd799439011"
+        categories:
+          type: array
+          items:
+            $ref: "#/components/schemas/CategoryWithItems"
+        totalCategories:
+          type: integer
+          example: 5
+        totalItems:
+          type: integer
+          example: 50

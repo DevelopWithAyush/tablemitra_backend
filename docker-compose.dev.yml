@@ -1,0 +1,115 @@
+services:
+  # ==================== Infrastructure Services ====================
+  mongo:
+    image: mongo:7
+    container_name: mongo_dev
+    command: ["--replSet", "rs0", "--bind_ip_all"]
+    ports:
+      - "27018:27017"
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: |
+        mongosh --eval "try { rs.status().ok } catch(e) { rs.initiate({ _id: 'rs0', members: [{ _id: 0, host: 'localhost:27017' }] }).ok }"
+      interval: 10s
+      start_period: 30s
+
+  redis:
+    image: redis:7
+    container_name: redis_dev
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: rabbitmq_dev
+    ports:
+      - "15672:15672"   # RabbitMQ Management UI
+      - "5672:5672"     # RabbitMQ AMQP port
+    healthcheck:
+      test: rabbitmq-diagnostics -q ping
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # ==================== Application Services ====================
+  api-service:
+    build:
+      context: ./api-service
+      dockerfile: Dockerfile.dev
+    container_name: api-service-dev
+    ports:
+      - "5000:5000"
+    environment:
+      - CHOKIDAR_USEPOLLING=true
+      - PORT=5000
+      - MONGO_URL=mongodb://mongo:27017/app_dev?replicaSet=rs0&directConnection=true
+      - REDIS_URL=redis://redis:6379
+      - RABBITMQ_URL=amqp://rabbitmq:5672
+    volumes:
+      - ./api-service:/app
+      - /app/node_modules
+    command: npm run dev
+    depends_on:
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  audit-service:
+    build:
+      context: ./audit-service
+      dockerfile: Dockerfile.dev
+    container_name: audit-service-dev
+    ports:
+      - "5001:5001"
+    environment:
+      - CHOKIDAR_USEPOLLING=true
+      - PORT=5001
+      - MONGO_URL=mongodb://mongo:27017/tablemitra_audit?replicaSet=rs0&directConnection=true
+      - RABBITMQ_URL=amqp://rabbitmq:5672
+    volumes:
+      - ./audit-service:/app
+      - /app/node_modules
+    command: npm run dev
+    depends_on:
+      mongo:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  analytics-service:
+    build:
+      context: ./analytics-service
+      dockerfile: Dockerfile.dev
+    container_name: analytics-service-dev
+    ports:
+      - "5002:5002"
+    environment:
+      - CHOKIDAR_USEPOLLING=true
+      - PORT=5002
+      - MONGO_URL=mongodb://mongo:27017/tablemitra_analytics?replicaSet=rs0&directConnection=true
+      - REDIS_URL=redis://redis:6379
+      - RABBITMQ_URL=amqp://rabbitmq:5672
+    volumes:
+      - ./analytics-service:/app
+      - /app/node_modules
+    command: npm run dev
+    depends_on:
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+volumes:
+  mongo_data:

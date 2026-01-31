@@ -1,0 +1,9 @@
+.env
+logs/
+node_modules/
+.DS_Store
+.cursor/
+.vscode/
+dist/
+.env.local
+.dockerignore

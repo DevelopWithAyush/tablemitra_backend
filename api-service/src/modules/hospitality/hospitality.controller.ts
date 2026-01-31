@@ -1,0 +1,409 @@
+import { Request, Response } from "express";
+import { asyncHandler } from "../../utils/async-handler.js";
+import { IJwtPayload } from "../auth/auth.types.js";
+import hospitalityService from "./hospitality.service.js";
+import logger from "../../helpers/logger/index.js";
+
+class HospitalityController {
+
+    // ==================== Sales Panel APIs ====================
+
+    /**
+     * Onboard Chain + Founder (Sales)
+     * POST /api/sales/hospitality/chains
+     */
+    onboardChain = asyncHandler(async (req: Request, res: Response) => {
+        const app = req.params.app as string 
+        const user = (req as any).user as IJwtPayload;
+        const { 
+            name, description, settings,
+            founderPhone, founderName, founderEmail, founderDesignation 
+        } = req.body;
+
+        const result = await hospitalityService.onboardChainWithFounder(
+            {
+                chainName: name,
+                chainDescription: description,
+                chainSettings: settings,
+                founderPhone,
+                founderName,
+                founderEmail,
+                founderDesignation,
+            },
+            user.sub
+        );
+
+        if (!result.success) {
+            return res.status(400).json({
+                success: false,
+                message: result.message,
+            });
+        }
+
+        return res.status(201).json({
+            success: true,
+            message: "Chain onboarded successfully",
+            data: result.data,
+        });
+    });
+
+    /**
+     * Get all chains (Sales)
+     * GET /api/sales/hospitality/chains
+     */
+    getAllChains = asyncHandler(async (req: Request, res: Response) => {
+        const { page, limit, search, isActive } = req.query;
+
+        const result = await hospitalityService.getAllChains({
+            page: page ? parseInt(page as string) : undefined,
+            limit: limit ? parseInt(limit as string) : undefined,
+            search: search as string,
+            isActive: isActive === "true" ? true : isActive === "false" ? false : undefined,
+        });
+
+        return res.status(200).json({
+            success: true,
+            data: result,
+        });
+    });
+
+    /**
+     * Get chain by ID (Sales/Founder)
+     * GET /api/sales/hospitality/chains/:chainId
+     */
+    getChainById = asyncHandler(async (req: Request, res: Response) => {
+        const { chainId } = req.params;
+
+        const result = await hospitalityService.getChainById(chainId);
+
+        if (!result.success) {
+            return res.status(404).json({
+                success: false,
+                message: result.message,
+            });
+        }
+
+        return res.status(200).json({
+            success: true,
+            data: result.data,
+        });
+    });
+
+    /**
+     * Onboard Hotel + Manager (Sales)
+     * POST /api/sales/hospitality/chains/:chainId/hotels
+     */
+    onboardHotel = asyncHandler(async (req: Request, res: Response) => {
+        const user = (req as any).user as IJwtPayload;
+        const { chainId } = req.params;
+        const {
+            name, description, address, contact,
+            managerPhone, managerName, managerEmail,
+            totalRooms, settings, panelSettings,
+        } = req.body;
+
+        const result = await hospitalityService.onboardHotelWithManager(
+            chainId,
+            {
+                name,
+                description,
+                address,
+                contact,
+                managerPhone,
+                managerName,
+                managerEmail,
+                totalRooms,
+                settings,
+                panelSettings,
+            },
+            user.sub
+        );
+
+        if (!result.success) {
+            return res.status(400).json({
+                success: false,
+                message: result.message,
+            });
+        }
+
+        return res.status(201).json({
+            success: true,
+            message: "Hotel onboarded successfully",
+            data: result.data,
+        });
+    });
+
+    /**
+     * Get all hotels (Sales)
+     * GET /api/sales/hospitality/hotels
+     */
+    getAllHotels = asyncHandler(async (req: Request, res: Response) => {
+        const { page, limit, search, chainId, city, isActive } = req.query;
+
+        const result = await hospitalityService.getAllHotels({
+            page: page ? parseInt(page as string) : undefined,
+            limit: limit ? parseInt(limit as string) : undefined,
+            search: search as string,
+            chainId: chainId as string,
+            city: city as string,
+            isActive: isActive === "true" ? true : isActive === "false" ? false : undefined,
+        });
+
+        return res.status(200).json({
+            success: true,
+            data: result,
+        });
+    });
+
+    /**
+     * Get hotel by ID (Sales/Founder)
+     * GET /api/sales/hospitality/hotels/:hotelId
+     */
+    getHotelById = asyncHandler(async (req: Request, res: Response) => {
+        const { hotelId } = req.params;
+        logger.info(`hotelId`)
+
+        const result = await hospitalityService.getHotelById(hotelId);
+
+        if (!result.success) {
+            return res.status(404).json({
+                success: false,
+                message: result.message,
+            });
+        }
+
+        return res.status(200).json({
+            success: true,
+            data: result.data,
+        });
+    });
+
+    // ==================== Founder Panel APIs ====================
+
+    /**
+     * Create new chain (Founder)
+     * POST /api/founder/hospitality/chains
+     */
+    founderCreateChain = asyncHandler(async (req: Request, res: Response) => {
+        const user = (req as any).user as IJwtPayload;
+        const { name, description, settings } = req.body;
+
+        const result = await hospitalityService.founderCreateChain(user.sub, {
+            name,
+            description,
+            settings,
+        });
+
+        if (!result.success) {
+            return res.status(400).json({
+                success: false,
+                message: result.message,
+            });
+        }
+
+        return res.status(201).json({
+            success: true,
+            message: "Chain created successfully",
+            data: result.data,
+        });
+    });
+
+    /**
+     * Add chain member (Founder)
+     * POST /api/founder/hospitality/chains/:chainId/members
+     */
+    addChainMember = asyncHandler(async (req: Request, res: Response) => {
+        const user = (req as any).user as IJwtPayload;
+        const { chainId } = req.params;
+        const { phone, name, email, designation, role } = req.body;
+
+        // Verify founder has access to this chain
+        const hasAccess = await hospitalityService.founderHasChainAccess(user.sub, chainId);
+        if (!hasAccess) {
+            return res.status(403).json({
+                success: false,
+                message: "You do not have access to this chain",
+            });
+        }
+
+        const result = await hospitalityService.addChainMember(
+            chainId,
+            { phone, name, email, designation, role },
+            user.sub
+        );
+
+        if (!result.success) {
+            return res.status(400).json({
+                success: false,
+                message: result.message,
+            });
+        }
+
+        return res.status(201).json({
+            success: true,
+            message: "Member added successfully",
+            data: result.data,
+        });
+    });
+
+    /**
+     * Get chain members (Founder)
+     * GET /api/founder/hospitality/chains/:chainId/members
+     */
+    getChainMembers = asyncHandler(async (req: Request, res: Response) => {
+        const user = (req as any).user as IJwtPayload;
+        const { chainId } = req.params;
+
+        // Verify founder has access
+        const hasAccess = await hospitalityService.founderHasChainAccess(user.sub, chainId);
+        if (!hasAccess) {
+            return res.status(403).json({
+                success: false,
+                message: "You do not have access to this chain",
+            });
+        }
+
+        const result = await hospitalityService.getChainMembers(chainId);
+
+        return res.status(200).json({
+            success: true,
+            data: result,
+        });
+    });
+
+    /**
+     * Founder onboard hotel
+     * POST /api/founder/hospitality/hotels
+     */
+    founderOnboardHotel = asyncHandler(async (req: Request, res: Response) => {
+        const user = (req as any).user as IJwtPayload;
+        const {
+            chainId,
+            name, description, address, contact,
+            managerPhone, managerName, managerEmail,
+            totalRooms, settings, panelSettings,
+        } = req.body;
+
+        // Verify founder has access to the chain
+        const hasAccess = await hospitalityService.founderHasChainAccess(user.sub, chainId);
+        if (!hasAccess) {
+            return res.status(403).json({
+                success: false,
+                message: "You do not have access to this chain",
+            });
+        }
+
+        const result = await hospitalityService.onboardHotelWithManager(
+            chainId,
+            {
+                name,
+                description,
+                address,
+                contact,
+                managerPhone,
+                managerName,
+                managerEmail,
+                totalRooms,
+                settings,
+                panelSettings,
+            },
+            user.sub
+        );
+
+        if (!result.success) {
+            return res.status(400).json({
+                success: false,
+                message: result.message,
+            });
+        }
+
+        return res.status(201).json({
+            success: true,
+            message: "Hotel onboarded successfully",
+            data: result.data,
+        });
+    });
+
+    /**
+     * Get hotels by current chain context (Founder)
+     * GET /api/founder/hospitality/hotels
+     */
+    getFounderHotels = asyncHandler(async (req: Request, res: Response) => {
+        const user = (req as any).user as IJwtPayload;
+        const { page, limit, search } = req.query;
+
+        // Get chain from JWT context
+        const chainId = user.ctx?.id;
+        if (!chainId) {
+            return res.status(400).json({
+                success: false,
+                message: "No chain context found. Please switch to a chain first.",
+            });
+        }
+
+        const result = await hospitalityService.getHotelsByChainId(chainId, {
+            page: page ? parseInt(page as string) : undefined,
+            limit: limit ? parseInt(limit as string) : undefined,
+            search: search as string,
+        });
+
+        return res.status(200).json({
+            success: true,
+            data: result,
+        });
+    });
+
+    // ==================== Staff Management APIs ====================
+
+    /**
+     * Onboard staff (Founder/Manager/Sales)
+     * POST /api/:app/hospitality/hotels/:hotelId/staff
+     */
+    onboardStaff = asyncHandler(async (req: Request, res: Response) => {
+        const user = (req as any).user as IJwtPayload;
+        const { hotelId } = req.params;
+        const { phone, name, email, designation } = req.body;
+
+        const result = await hospitalityService.onboardStaff(
+            hotelId,
+            { phone, name, email, designation },
+            user.sub
+        );
+
+        if (!result.success) {
+            return res.status(400).json({
+                success: false,
+                message: result.message,
+            });
+        }
+
+        return res.status(201).json({
+            success: true,
+            message: "Staff onboarded successfully",
+            data: result.data,
+        });
+    });
+
+    /**
+     * Get staff by hotel
+     * GET /api/:app/hospitality/hotels/:hotelId/staff
+     */
+    getHotelStaff = asyncHandler(async (req: Request, res: Response) => {
+        const { hotelId } = req.params;
+        const { page, limit, search, designation } = req.query;
+
+        const result = await hospitalityService.getStaffByHotelId(hotelId, {
+            page: page ? parseInt(page as string) : undefined,
+            limit: limit ? parseInt(limit as string) : undefined,
+            search: search as string,
+            designation: designation as string,
+        });
+
+        return res.status(200).json({
+            success: true,
+            data: result,
+        });
+    });
+}
+
+export default new HospitalityController();
