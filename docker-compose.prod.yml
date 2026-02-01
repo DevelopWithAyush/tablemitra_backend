@@ -3,7 +3,7 @@ services:
   mongo:
     image: mongo:7
     container_name: mongo_prod
-    command: ["--replSet", "rs0", "--bind_ip_all"]
+    command: [ "--replSet", "rs0", "--bind_ip_all" ]
     volumes:
       - mongo_data:/data/db
     healthcheck:
@@ -11,15 +11,17 @@ services:
         mongosh --eval "try { rs.status().ok } catch(e) { rs.initiate({ _id: 'rs0', members: [{ _id: 0, host: 'localhost:27017' }] }).ok }"
       interval: 10s
       start_period: 30s
+    restart: always
 
   redis:
     image: redis:7
     container_name: redis_prod
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: [ "CMD", "redis-cli", "ping" ]
       interval: 10s
       timeout: 5s
       retries: 5
+    restart: always
 
   rabbitmq:
     image: rabbitmq:3-management
@@ -30,6 +32,7 @@ services:
       timeout: 5s
       retries: 5
       start_period: 30s
+    restart: always
 
   # ==================== Application Services ====================
   api-service:
@@ -38,13 +41,13 @@ services:
       dockerfile: Dockerfile
     container_name: api-service-prod
     ports:
-      - "5000:5000"
+      - "${API_PORT:-5000}:5000"
     environment:
       NODE_ENV: production
       PORT: 5000
-      MONGO_URL: mongodb://mongo:27017/app?replicaSet=rs0&directConnection=true
-      REDIS_URL: redis://redis:6379
-      RABBITMQ_URL: amqp://rabbitmq:5672
+      MONGO_URL: ${MONGO_URL}
+      REDIS_URL: ${REDIS_URL}
+      RABBITMQ_URL: ${RABBITMQ_URL}
     depends_on:
       mongo:
         condition: service_healthy
@@ -52,7 +55,7 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
-    restart: unless-stopped
+    restart: always
 
   audit-service:
     build:
@@ -60,18 +63,18 @@ services:
       dockerfile: Dockerfile
     container_name: audit-service-prod
     ports:
-      - "5001:5001"
+      - "${AUDIT_PORT:-5001}:5001"
     environment:
       NODE_ENV: production
       PORT: 5001
-      MONGO_URL: mongodb://mongo:27017/tablemitra_audit?replicaSet=rs0&directConnection=true
-      RABBITMQ_URL: amqp://rabbitmq:5672
+      MONGO_URL: ${MONGO_URL_AUDIT}
+      RABBITMQ_URL: ${RABBITMQ_URL}
     depends_on:
       mongo:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
-    restart: unless-stopped
+    restart: always
 
   analytics-service:
     build:
@@ -79,13 +82,13 @@ services:
       dockerfile: Dockerfile
     container_name: analytics-service-prod
     ports:
-      - "5002:5002"
+      - "${ANALYTICS_PORT:-5002}:5002"
     environment:
       NODE_ENV: production
       PORT: 5002
-      MONGO_URL: mongodb://mongo:27017/tablemitra_analytics?replicaSet=rs0&directConnection=true
-      REDIS_URL: redis://redis:6379
-      RABBITMQ_URL: amqp://rabbitmq:5672
+      MONGO_URL: ${MONGO_URL_ANALYTICS}
+      REDIS_URL: ${REDIS_URL}
+      RABBITMQ_URL: ${RABBITMQ_URL}
     depends_on:
       mongo:
         condition: service_healthy
@@ -93,7 +96,7 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
-    restart: unless-stopped
+    restart: always
 
 volumes:
   mongo_data:

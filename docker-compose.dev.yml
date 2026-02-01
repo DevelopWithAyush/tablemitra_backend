@@ -3,7 +3,7 @@ services:
   mongo:
     image: mongo:7
     container_name: mongo_dev
-    command: ["--replSet", "rs0", "--bind_ip_all"]
+    command: [ "--replSet", "rs0", "--bind_ip_all" ]
     ports:
       - "27018:27017"
     volumes:
@@ -20,7 +20,7 @@ services:
     ports:
       - "6379:6379"
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: [ "CMD", "redis-cli", "ping" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -29,8 +29,8 @@ services:
     image: rabbitmq:3-management
     container_name: rabbitmq_dev
     ports:
-      - "15672:15672"   # RabbitMQ Management UI
-      - "5672:5672"     # RabbitMQ AMQP port
+      - "15672:15672" # RabbitMQ Management UI
+      - "5672:5672" # RabbitMQ AMQP port
     healthcheck:
       test: rabbitmq-diagnostics -q ping
       interval: 10s
@@ -49,7 +49,7 @@ services:
     env_file:
       - ./api-service/.env
     environment:
-      - CHOKIDAR_USEPOLLING=true
+      - NODE_ENV=development
     volumes:
       - ./api-service:/app
       - /app/node_modules
@@ -72,7 +72,7 @@ services:
     env_file:
       - ./audit-service/.env
     environment:
-      - CHOKIDAR_USEPOLLING=true
+      - NODE_ENV=development
     volumes:
       - ./audit-service:/app
       - /app/node_modules
@@ -93,7 +93,7 @@ services:
     env_file:
       - ./analytics-service/.env
     environment:
-      - CHOKIDAR_USEPOLLING=true
+      - NODE_ENV=development
     volumes:
       - ./analytics-service:/app
       - /app/node_modules
