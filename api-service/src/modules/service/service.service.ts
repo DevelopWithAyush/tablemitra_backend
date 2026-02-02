@@ -16,8 +16,10 @@ import {
     IServicePopulated,
     ICategoryWithServices,
     IFullServiceCatalog,
+    ServiceAuditContext,
 } from "./service.types.js";
 import logger from "../../helpers/logger/index.js";
+import { publishAuditEvent } from "../audit/audit.publisher.js";
 
 // ==================== CACHE CONFIGURATION ====================
 
@@ -158,7 +160,8 @@ class ServiceOptimizationService {
      */
     createCategory = async (
         hotelId: string,
-        dto: CreateCategoryDTO
+        dto: CreateCategoryDTO,
+        auditContext?: ServiceAuditContext
     ): Promise<ServiceResult<ICategory>> => {
         try {
             // Check for duplicate name in same hotel
@@ -183,6 +186,16 @@ class ServiceOptimizationService {
             // Invalidate cache
             await invalidateServiceCache(hotelId);
 
+            if (auditContext) {
+                publishAuditEvent(
+                    "SERVICE_CATEGORY_CREATED",
+                    "SERVICE_CATEGORY",
+                    category._id.toString(),
+                    auditContext.actor,
+                    { context: { ...auditContext.context, hotelId }, newData: { name: category.name } }
+                ).catch(() => {});
+            }
+
             logger.info(`Service category created: ${category._id} for hotel: ${hotelId}`);
 
             return {
@@ -204,7 +217,8 @@ class ServiceOptimizationService {
     updateCategory = async (
         hotelId: string,
         categoryId: string,
-        dto: UpdateCategoryDTO
+        dto: UpdateCategoryDTO,
+        auditContext?: ServiceAuditContext
     ): Promise<ServiceResult<ICategory>> => {
         try {
             const category = await ServiceCategoryModel.findOne({
@@ -243,6 +257,16 @@ class ServiceOptimizationService {
 
             await category.save();
 
+            if (auditContext) {
+                publishAuditEvent(
+                    "SERVICE_CATEGORY_UPDATED",
+                    "SERVICE_CATEGORY",
+                    categoryId,
+                    auditContext.actor,
+                    { context: { ...auditContext.context, hotelId }, newData: { name: category.name, isActive: category.isActive } }
+                ).catch(() => {});
+            }
+
             // Invalidate cache
             await invalidateServiceCache(hotelId);
 
@@ -264,7 +288,7 @@ class ServiceOptimizationService {
     /**
      * Toggle category active status
      */
-    toggleCategory = async (hotelId: string, categoryId: string): Promise<ToggleResult> => {
+    toggleCategory = async (hotelId: string, categoryId: string, auditContext?: ServiceAuditContext): Promise<ToggleResult> => {
         try {
             const category = await ServiceCategoryModel.findOne({
                 _id: new Types.ObjectId(categoryId),
@@ -277,6 +301,16 @@ class ServiceOptimizationService {
 
             category.isActive = !category.isActive;
             await category.save();
+
+            if (auditContext) {
+                publishAuditEvent(
+                    "SERVICE_CATEGORY_UPDATED",
+                    "SERVICE_CATEGORY",
+                    categoryId,
+                    auditContext.actor,
+                    { context: { ...auditContext.context, hotelId }, newData: { isActive: category.isActive } }
+                ).catch(() => {});
+            }
 
             // Invalidate cache
             await invalidateServiceCache(hotelId);
@@ -414,7 +448,8 @@ class ServiceOptimizationService {
     createService = async (
         hotelId: string,
         categoryId: string,
-        dto: CreateServiceDTO
+        dto: CreateServiceDTO,
+        auditContext?: ServiceAuditContext
     ): Promise<ServiceResult<IService>> => {
         try {
             // Verify category exists
@@ -451,6 +486,16 @@ class ServiceOptimizationService {
                 availability: dto.availability,
             });
 
+            if (auditContext) {
+                publishAuditEvent(
+                    "SERVICE_ITEM_CREATED",
+                    "SERVICE_ITEM",
+                    service._id.toString(),
+                    auditContext.actor,
+                    { context: { ...auditContext.context, hotelId }, newData: { name: service.name, shortCode: service.shortCode, categoryId } }
+                ).catch(() => {});
+            }
+
             // Invalidate cache
             await invalidateServiceCache(hotelId);
 
@@ -475,7 +520,8 @@ class ServiceOptimizationService {
     updateService = async (
         hotelId: string,
         serviceId: string,
-        dto: UpdateServiceDTO
+        dto: UpdateServiceDTO,
+        auditContext?: ServiceAuditContext
     ): Promise<ServiceResult<IServicePopulated>> => {
         try {
             const service = await ServiceItemModel.findOne({
@@ -519,6 +565,16 @@ class ServiceOptimizationService {
 
             await service.save();
 
+            if (auditContext) {
+                publishAuditEvent(
+                    "SERVICE_ITEM_UPDATED",
+                    "SERVICE_ITEM",
+                    serviceId,
+                    auditContext.actor,
+                    { context: { ...auditContext.context, hotelId } }
+                ).catch(() => {});
+            }
+
             // Fetch updated service with populated image
             const updatedService = await this.getServiceById(hotelId, serviceId);
             if (!updatedService.success) {
@@ -543,7 +599,7 @@ class ServiceOptimizationService {
     /**
      * Toggle service active status
      */
-    toggleService = async (hotelId: string, serviceId: string): Promise<ToggleResult> => {
+    toggleService = async (hotelId: string, serviceId: string, auditContext?: ServiceAuditContext): Promise<ToggleResult> => {
         try {
             const service = await ServiceItemModel.findOne({
                 _id: new Types.ObjectId(serviceId),
@@ -556,6 +612,16 @@ class ServiceOptimizationService {
 
             service.isActive = !service.isActive;
             await service.save();
+
+            if (auditContext) {
+                publishAuditEvent(
+                    "SERVICE_ITEM_AVAILABILITY_CHANGED",
+                    "SERVICE_ITEM",
+                    serviceId,
+                    auditContext.actor,
+                    { context: { ...auditContext.context, hotelId }, newData: { isActive: service.isActive } }
+                ).catch(() => {});
+            }
 
             // Invalidate cache
             await invalidateServiceCache(hotelId);

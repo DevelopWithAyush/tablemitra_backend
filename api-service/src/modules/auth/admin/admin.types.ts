@@ -1,6 +1,13 @@
 import { Types } from "mongoose";
+import type { AuditEventActor, AuditEventContext } from "../../audit/audit.types.js";
 
 export type RoleScope = "GLOBAL" | "CHAIN" | "HOTEL";
+
+/** Passed from controller so service can publish audit events (actor + request context). */
+export interface AdminAuditContext {
+    actor: AuditEventActor;
+    context?: AuditEventContext;
+}
 
 export interface ICreateRoleInput {
     key: string;

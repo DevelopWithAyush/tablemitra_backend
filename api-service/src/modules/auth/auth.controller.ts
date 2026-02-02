@@ -1,9 +1,10 @@
 import { Request, Response } from "express";
 import { asyncHandler } from "../../utils/async-handler.js";
-import { buildCookieOptions } from "../../utils/cookies.js";
 import { IJwtPayload, SendOtpDTO, VerifyOtpDTO } from "./auth.types.js";
 import authService from "./auth.service.js";
 import logger from "../../helpers/logger/index.js";
+import { publishAuditEvent } from "../audit/audit.publisher.js";
+import type { ActorRole } from "../audit/audit.types.js";
 
 class AuthController {
     sendOtp = asyncHandler(async (req: Request, res: Response) => {
@@ -59,6 +60,14 @@ class AuthController {
             maxAge: ACCESS_TOKEN_MAX_AGE,
         });
 
+        publishAuditEvent(
+            "USER_LOGIN",
+            "USER",
+            result.userId,
+            { userId: result.userId, role: result.roleKey as ActorRole },
+            { context: { panel: app, ip: req.ip, userAgent: req.get("User-Agent") } }
+        ).catch((err) => logger.error("Audit publish failed:", err));
+
         return res.status(200).json({
             success: true,
             message: "OTP verified successfully",
@@ -79,7 +88,7 @@ class AuthController {
             });
         }
 
-        const result = await authService.refreshToken(refreshTokenValue, app);
+        const result = await authService.refreshToken(refreshTokenValue as string, app as string);
 
         if (!result.success) {
             // Clear cookies on failure
@@ -145,7 +154,7 @@ class AuthController {
         const user = (req as any).user as IJwtPayload;
         const { app } = req.params;
 
-        const result = await authService.logout(user.sub, user.roleId, app);
+        const result = await authService.logout(user.sub, user.roleId, app as string);
 
         if (!result.success) {
             const statusCode = result.unauthorized ? 401 : 400;
@@ -155,7 +164,7 @@ class AuthController {
             });
         }
 
-        res.clearCookie(`accessToken_${app}`, 
+        res.clearCookie(`accessToken_${app}`,
             {
                 httpOnly: true,
                 secure: true,
@@ -169,6 +178,14 @@ class AuthController {
             sameSite: 'none',
             maxAge: 0,
         });
+
+        publishAuditEvent(
+            "USER_LOGOUT",
+            "USER",
+            user.sub,
+            { userId: user.sub, role: user.roleId as ActorRole },
+            { context: { panel: app as string, ip: req.ip, userAgent: req.get("User-Agent") } }
+        ).catch((err) => logger.error("Audit publish failed:", err));
 
         return res.status(200).json({
             success: true,
@@ -224,7 +241,7 @@ class AuthController {
             user.sub,
             user.roleId,
             chainId,
-            app  
+            app as string
         );
 
         if (!result.success) {

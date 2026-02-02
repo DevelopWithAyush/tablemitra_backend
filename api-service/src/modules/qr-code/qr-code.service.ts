@@ -11,7 +11,9 @@ import {
     IAddSingleQrCodeInput,
     IToggleQrStatusInput,
     IQrCodeInfo,
+    QrCodeAuditContext,
 } from "./qr-code.types.js";
+import { publishAuditEvent } from "../audit/audit.publisher.js";
 
 class QrCodeService {
     private readonly CACHE_TTL_SECONDS = 60 * 10; // 10 minutes
@@ -192,7 +194,8 @@ class QrCodeService {
      */
     async generateQrCodes(
         hotelId: string,
-        input: IGenerateQrCodesInput
+        input: IGenerateQrCodesInput,
+        auditContext?: QrCodeAuditContext
     ): Promise<ServiceResult<{ created: number; failed: string[] }>> {
         return await runInTransaction(async (session) => {
             const setRes = await this.ensureActiveQrSetForHotel(hotelId, session);
@@ -297,6 +300,16 @@ class QrCodeService {
 
             await this.invalidateHotelCache(hotelId);
 
+            if (auditContext) {
+                publishAuditEvent(
+                    "QR_CODES_GENERATED",
+                    "HOTEL",
+                    hotelId,
+                    auditContext.actor,
+                    { context: { ...auditContext.context, hotelId }, newData: { count: newQrCodes.length, type: input.type } }
+                ).catch(() => {});
+            }
+
             return {
                 success: true,
                 message: `Successfully generated ${newQrCodes.length} QR codes`,
@@ -310,7 +323,8 @@ class QrCodeService {
      */
     async addSingleQrCode(
         hotelId: string,
-        input: IAddSingleQrCodeInput
+        input: IAddSingleQrCodeInput,
+        auditContext?: QrCodeAuditContext
     ): Promise<ServiceResult<IQrCodeInfo>> {
         return await runInTransaction(async (session) => {
             const setRes = await this.ensureActiveQrSetForHotel(hotelId, session);
@@ -355,6 +369,16 @@ class QrCodeService {
 
             await this.invalidateHotelCache(hotelId);
             await this.invalidateScanCacheByCode(finalCode);
+
+            if (auditContext) {
+                publishAuditEvent(
+                    "QR_CODE_ADDED",
+                    "HOTEL",
+                    hotelId,
+                    auditContext.actor,
+                    { context: { ...auditContext.context, hotelId }, newData: { codeId: created[0]._id.toString(), type: input.type } }
+                ).catch(() => {});
+            }
 
             return {
                 success: true,
@@ -434,7 +458,8 @@ class QrCodeService {
      */
     async toggleQrStatus(
         codeId: string,
-        input: IToggleQrStatusInput
+        input: IToggleQrStatusInput,
+        auditContext?: QrCodeAuditContext
     ): Promise<ServiceResult> {
         return await runInTransaction(async (session) => {
             const existing = await QrCode.findOne({ _id: codeId, isActive: true }).session(session);
@@ -455,10 +480,21 @@ class QrCodeService {
             await QrCode.updateOne({ _id: existing._id }, { $set: updateData }).session(session);
 
             const qrSet = await QrSet.findById(existing.qrSetId).select("hotelId").session(session).lean();
-            if (qrSet?.hotelId) {
-                await this.invalidateHotelCache(qrSet.hotelId.toString());
+            const hotelIdStr = qrSet?.hotelId?.toString();
+            if (hotelIdStr) {
+                await this.invalidateHotelCache(hotelIdStr);
             }
             await this.invalidateScanCacheByCode(existing.code);
+
+            if (auditContext && hotelIdStr) {
+                publishAuditEvent(
+                    "QR_CODE_STATUS_CHANGED",
+                    "HOTEL",
+                    hotelIdStr,
+                    auditContext.actor,
+                    { context: { ...auditContext.context, hotelId: hotelIdStr }, newData: { codeId, isActive: input.isActive } }
+                ).catch(() => {});
+            }
 
             return { success: true, message: `QR Code marked as ${input.isActive ? "Active" : "Inactive"}` };
         });
@@ -470,7 +506,8 @@ class QrCodeService {
      */
     async deleteQrCode(
         codeId: string,
-        reason?: string
+        reason?: string,
+        auditContext?: QrCodeAuditContext
     ): Promise<ServiceResult> {
         return await runInTransaction(async (session) => {
             const existing = await QrCode.findOne({ _id: codeId, isActive: true }).session(session);
@@ -486,10 +523,21 @@ class QrCodeService {
             await QrCode.updateOne({ _id: existing._id }, { $set: updateData }).session(session);
 
             const qrSet = await QrSet.findById(existing.qrSetId).select("hotelId").session(session).lean();
-            if (qrSet?.hotelId) {
-                await this.invalidateHotelCache(qrSet.hotelId.toString());
+            const hotelIdStr = qrSet?.hotelId?.toString();
+            if (hotelIdStr) {
+                await this.invalidateHotelCache(hotelIdStr);
             }
             await this.invalidateScanCacheByCode(existing.code);
+
+            if (auditContext && hotelIdStr) {
+                publishAuditEvent(
+                    "QR_CODE_DELETED",
+                    "HOTEL",
+                    hotelIdStr,
+                    auditContext.actor,
+                    { context: { ...auditContext.context, hotelId: hotelIdStr }, newData: { codeId } }
+                ).catch(() => {});
+            }
 
             return { success: true, message: "QR Code deleted successfully" };
         });

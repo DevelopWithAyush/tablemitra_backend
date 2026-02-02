@@ -1,5 +1,12 @@
 import { Types, ClientSession } from "mongoose";
 import { z } from "zod";
+import type { AuditEventActor, AuditEventContext } from "../audit/audit.types.js";
+
+/** Passed from controller so service can publish audit events (actor + request context). */
+export interface QrCodeAuditContext {
+    actor: AuditEventActor;
+    context?: AuditEventContext;
+}
 import {
     GenerateQrCodesSchema,
     AddSingleQrCodeSchema,

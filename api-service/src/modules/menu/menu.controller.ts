@@ -9,6 +9,8 @@ import {
     PaginationSchema,
 } from "./validator/menu.validator.js";
 import { IJwtPayload } from "../auth/auth.types.js";
+import type { MenuAuditContext } from "./menu.types.js";
+import type { ActorRole } from "../audit/audit.types.js";
 
 // ==================== HELPER ====================
 
@@ -23,6 +25,26 @@ const getHotelIdFromContext = (req: Request): string => {
     }
     return hotelId;
 };
+
+function getAuditContext(req: Request): MenuAuditContext {
+    const user = (req as Request & { user: IJwtPayload }).user;
+    const app = req.params.app;
+    const panel = typeof app === "string" ? app : app?.[0];
+    const roleByApp: Record<string, ActorRole> = {
+        sales: "SALES",
+        founder: "FOUNDER",
+        admin: "ADMIN",
+        manager: "MANAGER",
+        frontdesk: "FRONTDESK_STAFF",
+        kitchen: "KITCHEN_STAFF",
+        "room-service": "ROOM_SERVICE_STAFF",
+    };
+    const role: ActorRole = (panel && roleByApp[panel]) || "ADMIN";
+    return {
+        actor: { userId: user.sub, role },
+        context: { ip: req.ip, userAgent: req.get("User-Agent") ?? undefined, panel },
+    };
+}
 
 // ==================== CATEGORY CONTROLLERS ====================
 
@@ -50,7 +72,7 @@ export const createCategory = asyncHandler(async (req: Request, res: Response) =
     const hotelId = getHotelIdFromContext(req);
     const dto = CreateCategorySchema.parse(req.body);
 
-    const result = await menuService.createCategory(hotelId, dto);
+    const result = await menuService.createCategory(hotelId, dto, getAuditContext(req));
 
     if (!result.success) {
         return res.status(400).json({
@@ -72,9 +94,9 @@ export const createCategory = asyncHandler(async (req: Request, res: Response) =
  */
 export const toggleCategory = asyncHandler(async (req: Request, res: Response) => {
     const hotelId = getHotelIdFromContext(req);
-    const { categoryId } = req.params;
+    const categoryId = req.params.categoryId as string;
 
-    const result = await menuService.toggleCategory(hotelId, categoryId);
+    const result = await menuService.toggleCategory(hotelId, categoryId, getAuditContext(req));
 
     if (!result.success) {
         return res.status(404).json({
@@ -98,7 +120,7 @@ export const toggleCategory = asyncHandler(async (req: Request, res: Response) =
  */
 export const getItems = asyncHandler(async (req: Request, res: Response) => {
     const hotelId = getHotelIdFromContext(req);
-    const { categoryId } = req.params;
+    const categoryId = req.params.categoryId as string;
     const query = PaginationSchema.parse(req.query);
 
     const result = await menuService.getItems(hotelId, categoryId, query);
@@ -122,10 +144,10 @@ export const getItems = asyncHandler(async (req: Request, res: Response) => {
  */
 export const createItem = asyncHandler(async (req: Request, res: Response) => {
     const hotelId = getHotelIdFromContext(req);
-    const { categoryId } = req.params;
+    const categoryId = req.params.categoryId as string;
     const dto = CreateItemSchema.parse(req.body);
 
-    const result = await menuService.createItem(hotelId, categoryId, dto);
+    const result = await menuService.createItem(hotelId, categoryId, dto, getAuditContext(req));
 
     if (!result.success) {
         return res.status(400).json({
@@ -147,10 +169,10 @@ export const createItem = asyncHandler(async (req: Request, res: Response) => {
  */
 export const updateItem = asyncHandler(async (req: Request, res: Response) => {
     const hotelId = getHotelIdFromContext(req);
-    const { itemId } = req.params;
+    const itemId = req.params.itemId as string;
     const dto = UpdateItemSchema.parse(req.body);
 
-    const result = await menuService.updateItem(hotelId, itemId, dto);
+    const result = await menuService.updateItem(hotelId, itemId, dto, getAuditContext(req));
 
     if (!result.success) {
         return res.status(400).json({
@@ -172,9 +194,9 @@ export const updateItem = asyncHandler(async (req: Request, res: Response) => {
  */
 export const toggleItem = asyncHandler(async (req: Request, res: Response) => {
     const hotelId = getHotelIdFromContext(req);
-    const { itemId } = req.params;
+    const itemId = req.params.itemId as string;
 
-    const result = await menuService.toggleItem(hotelId, itemId);
+    const result = await menuService.toggleItem(hotelId, itemId, getAuditContext(req));
 
     if (!result.success) {
         return res.status(404).json({
@@ -198,7 +220,7 @@ export const toggleItem = asyncHandler(async (req: Request, res: Response) => {
  */
 export const getVariants = asyncHandler(async (req: Request, res: Response) => {
     const hotelId = getHotelIdFromContext(req);
-    const { itemId } = req.params;
+    const itemId = req.params.itemId as string;
 
     const result = await menuService.getVariants(hotelId, itemId);
 

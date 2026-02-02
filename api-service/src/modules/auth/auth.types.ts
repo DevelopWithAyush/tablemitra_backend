@@ -72,6 +72,8 @@ export interface VerifyOtpSuccessResult {
     success: true;
     accessToken: string;
     refreshToken: string;
+    userId: string;
+    roleKey: string;
 }
 
 export interface VerifyOtpFailureResult {

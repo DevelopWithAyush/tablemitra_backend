@@ -1,3 +1,11 @@
+import type { AuditEventActor, AuditEventContext } from "../audit/audit.types.js";
+
+/** Passed from controller so service can publish audit events (actor + request context). */
+export interface HospitalityAuditContext {
+    actor: AuditEventActor;
+    context?: AuditEventContext;
+}
+
 // ==================== Interfaces ====================
 
 export interface IChain {

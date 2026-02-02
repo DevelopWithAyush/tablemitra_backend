@@ -3,6 +3,28 @@ import { asyncHandler } from "../../utils/async-handler.js";
 import { IJwtPayload } from "../auth/auth.types.js";
 import hospitalityService from "./hospitality.service.js";
 import logger from "../../helpers/logger/index.js";
+import type { HospitalityAuditContext } from "./hospitality.types.js";
+import type { ActorRole } from "../audit/audit.types.js";
+
+function getAuditContext(req: Request): HospitalityAuditContext {
+    const user = (req as Request & { user: IJwtPayload }).user;
+    const app = req.params.app;
+    const panel = typeof app === "string" ? app : app?.[0];
+    const roleByApp: Record<string, ActorRole> = {
+        sales: "SALES",
+        founder: "FOUNDER",
+        admin: "ADMIN",
+        manager: "MANAGER",
+        frontdesk: "FRONTDESK_STAFF",
+        kitchen: "KITCHEN_STAFF",
+        "room-service": "ROOM_SERVICE_STAFF",
+    };
+    const role: ActorRole = (panel && roleByApp[panel]) || "ADMIN";
+    return {
+        actor: { userId: user.sub, role },
+        context: { ip: req.ip, userAgent: req.get("User-Agent") ?? undefined, panel },
+    };
+}
 
 class HospitalityController {
 
@@ -30,7 +52,8 @@ class HospitalityController {
                 founderEmail,
                 founderDesignation,
             },
-            user.sub
+            user.sub,
+            getAuditContext(req)
         );
 
         if (!result.success) {
@@ -72,7 +95,7 @@ class HospitalityController {
      * GET /api/sales/hospitality/chains/:chainId
      */
     getChainById = asyncHandler(async (req: Request, res: Response) => {
-        const { chainId } = req.params;
+        const chainId = typeof req.params.chainId === "string" ? req.params.chainId : req.params.chainId?.[0] ?? "";
 
         const result = await hospitalityService.getChainById(chainId);
 
@@ -95,7 +118,7 @@ class HospitalityController {
      */
     onboardHotel = asyncHandler(async (req: Request, res: Response) => {
         const user = (req as any).user as IJwtPayload;
-        const { chainId } = req.params;
+        const chainId = typeof req.params.chainId === "string" ? req.params.chainId : req.params.chainId?.[0] ?? "";
         const {
             name, description, address, contact,
             managerPhone, managerName, managerEmail,
@@ -116,7 +139,8 @@ class HospitalityController {
                 settings,
                 panelSettings,
             },
-            user.sub
+            user.sub,
+            getAuditContext(req)
         );
 
         if (!result.success) {
@@ -160,8 +184,7 @@ class HospitalityController {
      * GET /api/sales/hospitality/hotels/:hotelId
      */
     getHotelById = asyncHandler(async (req: Request, res: Response) => {
-        const { hotelId } = req.params;
-        logger.info(`hotelId`)
+        const hotelId = typeof req.params.hotelId === "string" ? req.params.hotelId : req.params.hotelId?.[0] ?? "";
 
         const result = await hospitalityService.getHotelById(hotelId);
 
@@ -188,11 +211,11 @@ class HospitalityController {
         const user = (req as any).user as IJwtPayload;
         const { name, description, settings } = req.body;
 
-        const result = await hospitalityService.founderCreateChain(user.sub, {
-            name,
-            description,
-            settings,
-        });
+        const result = await hospitalityService.founderCreateChain(
+            user.sub,
+            { name, description, settings },
+            getAuditContext(req)
+        );
 
         if (!result.success) {
             return res.status(400).json({
@@ -214,7 +237,7 @@ class HospitalityController {
      */
     addChainMember = asyncHandler(async (req: Request, res: Response) => {
         const user = (req as any).user as IJwtPayload;
-        const { chainId } = req.params;
+        const chainId = typeof req.params.chainId === "string" ? req.params.chainId : req.params.chainId?.[0] ?? "";
         const { phone, name, email, designation, role } = req.body;
 
         // Verify founder has access to this chain
@@ -229,7 +252,8 @@ class HospitalityController {
         const result = await hospitalityService.addChainMember(
             chainId,
             { phone, name, email, designation, role },
-            user.sub
+            user.sub,
+            getAuditContext(req)
         );
 
         if (!result.success) {
@@ -252,7 +276,7 @@ class HospitalityController {
      */
     getChainMembers = asyncHandler(async (req: Request, res: Response) => {
         const user = (req as any).user as IJwtPayload;
-        const { chainId } = req.params;
+        const chainId = typeof req.params.chainId === "string" ? req.params.chainId : req.params.chainId?.[0] ?? "";
 
         // Verify founder has access
         const hasAccess = await hospitalityService.founderHasChainAccess(user.sub, chainId);
@@ -307,7 +331,8 @@ class HospitalityController {
                 settings,
                 panelSettings,
             },
-            user.sub
+            user.sub,
+            getAuditContext(req)
         );
 
         if (!result.success) {
@@ -361,13 +386,14 @@ class HospitalityController {
      */
     onboardStaff = asyncHandler(async (req: Request, res: Response) => {
         const user = (req as any).user as IJwtPayload;
-        const { hotelId } = req.params;
+        const hotelId = typeof req.params.hotelId === "string" ? req.params.hotelId : req.params.hotelId?.[0] ?? "";
         const { phone, name, email, designation } = req.body;
 
         const result = await hospitalityService.onboardStaff(
             hotelId,
             { phone, name, email, designation },
-            user.sub
+            user.sub,
+            getAuditContext(req)
         );
 
         if (!result.success) {
@@ -389,7 +415,7 @@ class HospitalityController {
      * GET /api/:app/hospitality/hotels/:hotelId/staff
      */
     getHotelStaff = asyncHandler(async (req: Request, res: Response) => {
-        const { hotelId } = req.params;
+        const hotelId = typeof req.params.hotelId === "string" ? req.params.hotelId : req.params.hotelId?.[0] ?? "";
         const { page, limit, search, designation } = req.query;
 
         const result = await hospitalityService.getStaffByHotelId(hotelId, {

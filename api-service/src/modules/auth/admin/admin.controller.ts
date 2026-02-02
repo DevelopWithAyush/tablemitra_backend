@@ -1,6 +1,9 @@
 import { Request, Response } from "express";
 import { asyncHandler } from "../../../utils/async-handler.js";
 import * as adminService from "./admin.service.js";
+import type { AdminAuditContext } from "./admin.types.js";
+import type { IJwtPayload } from "../auth.types.js";
+import type { ActorRole } from "../../audit/audit.types.js";
 import {
     CreateRoleSchema,
     UpdateRoleSchema,
@@ -10,6 +13,16 @@ import {
     SyncPermissionsSchema,
     PaginationSchema,
 } from "./validator/admin.validator.js";
+
+function getAuditContext(req: Request): AdminAuditContext {
+    const user = (req as Request & { user: IJwtPayload }).user;
+    const app = req.params.app;
+    const panel = typeof app === "string" ? app : app?.[0];
+    return {
+        actor: { userId: user.sub, role: "ADMIN" as ActorRole },
+        context: { ip: req.ip, userAgent: req.get("User-Agent") ?? undefined, panel },
+    };
+}
 
 export const getRoles = asyncHandler(async (req: Request, res: Response) => {
     const query = PaginationSchema.parse(req.query);
@@ -22,7 +35,7 @@ export const getRoles = asyncHandler(async (req: Request, res: Response) => {
 });
 
 export const getRoleById = asyncHandler(async (req: Request, res: Response) => {
-    const { id } = req.params;
+    const id = typeof req.params.id === "string" ? req.params.id : req.params.id?.[0] ?? "";
     const role = await adminService.getRoleById(id);
 
     if (!role) {
@@ -40,7 +53,7 @@ export const getRoleById = asyncHandler(async (req: Request, res: Response) => {
 
 export const createRole = asyncHandler(async (req: Request, res: Response) => {
     const input = CreateRoleSchema.parse(req.body);
-    const result = await adminService.createRole(input);
+    const result = await adminService.createRole(input, getAuditContext(req));
 
     if (!result.success) {
         return res.status(400).json({
@@ -56,9 +69,9 @@ export const createRole = asyncHandler(async (req: Request, res: Response) => {
 });
 
 export const updateRole = asyncHandler(async (req: Request, res: Response) => {
-    const { id } = req.params;
+    const id = typeof req.params.id === "string" ? req.params.id : req.params.id?.[0] ?? "";
     const input = UpdateRoleSchema.parse(req.body);
-    const result = await adminService.updateRole(id, input);
+    const result = await adminService.updateRole(id, input, getAuditContext(req));
 
     if (!result.success) {
         return res.status(400).json({
@@ -74,8 +87,8 @@ export const updateRole = asyncHandler(async (req: Request, res: Response) => {
 });
 
 export const deleteRole = asyncHandler(async (req: Request, res: Response) => {
-    const { id } = req.params;
-    const result = await adminService.deleteRole(id);
+    const id = typeof req.params.id === "string" ? req.params.id : req.params.id?.[0] ?? "";
+    const result = await adminService.deleteRole(id, getAuditContext(req));
 
     if (!result.success) {
         return res.status(400).json({
@@ -101,7 +114,7 @@ export const getPermissions = asyncHandler(async (req: Request, res: Response) =
 });
 
 export const getPermissionById = asyncHandler(async (req: Request, res: Response) => {
-    const { id } = req.params;
+    const id = typeof req.params.id === "string" ? req.params.id : req.params.id?.[0] ?? "";
     const permission = await adminService.getPermissionById(id);
 
     if (!permission) {
@@ -119,7 +132,7 @@ export const getPermissionById = asyncHandler(async (req: Request, res: Response
 
 export const createPermission = asyncHandler(async (req: Request, res: Response) => {
     const input = CreatePermissionSchema.parse(req.body);
-    const result = await adminService.createPermission(input);
+    const result = await adminService.createPermission(input, getAuditContext(req));
 
     if (!result.success) {
         return res.status(400).json({
@@ -135,9 +148,9 @@ export const createPermission = asyncHandler(async (req: Request, res: Response)
 });
 
 export const updatePermission = asyncHandler(async (req: Request, res: Response) => {
-    const { id } = req.params;
+    const id = typeof req.params.id === "string" ? req.params.id : req.params.id?.[0] ?? "";
     const input = UpdatePermissionSchema.parse(req.body);
-    const result = await adminService.updatePermission(id, input);
+    const result = await adminService.updatePermission(id, input, getAuditContext(req));
 
     if (!result.success) {
         return res.status(400).json({
@@ -153,8 +166,8 @@ export const updatePermission = asyncHandler(async (req: Request, res: Response)
 });
 
 export const deletePermission = asyncHandler(async (req: Request, res: Response) => {
-    const { id } = req.params;
-    const result = await adminService.deletePermission(id);
+    const id = typeof req.params.id === "string" ? req.params.id : req.params.id?.[0] ?? "";
+    const result = await adminService.deletePermission(id, getAuditContext(req));
 
     if (!result.success) {
         return res.status(400).json({
@@ -170,9 +183,9 @@ export const deletePermission = asyncHandler(async (req: Request, res: Response)
 });
 
 export const assignPermissionsToRole = asyncHandler(async (req: Request, res: Response) => {
-    const { roleId } = req.params;
+    const roleId = typeof req.params.roleId === "string" ? req.params.roleId : req.params.roleId?.[0] ?? "";
     const { permissionIds } = AssignPermissionsSchema.parse(req.body);
-    const result = await adminService.assignPermissionsToRole(roleId, permissionIds);
+    const result = await adminService.assignPermissionsToRole(roleId, permissionIds, getAuditContext(req));
 
     if (!result.success) {
         return res.status(400).json({
@@ -188,8 +201,9 @@ export const assignPermissionsToRole = asyncHandler(async (req: Request, res: Re
 });
 
 export const removePermissionFromRole = asyncHandler(async (req: Request, res: Response) => {
-    const { roleId, permissionId } = req.params;
-    const result = await adminService.removePermissionFromRole(roleId, permissionId);
+    const roleId = typeof req.params.roleId === "string" ? req.params.roleId : req.params.roleId?.[0] ?? "";
+    const permissionId = typeof req.params.permissionId === "string" ? req.params.permissionId : req.params.permissionId?.[0] ?? "";
+    const result = await adminService.removePermissionFromRole(roleId, permissionId, getAuditContext(req));
 
     if (!result.success) {
         return res.status(400).json({
@@ -205,9 +219,9 @@ export const removePermissionFromRole = asyncHandler(async (req: Request, res: R
 });
 
 export const syncRolePermissions = asyncHandler(async (req: Request, res: Response) => {
-    const { roleId } = req.params;
+    const roleId = typeof req.params.roleId === "string" ? req.params.roleId : req.params.roleId?.[0] ?? "";
     const { permissionIds } = SyncPermissionsSchema.parse(req.body);
-    const result = await adminService.syncRolePermissions(roleId, permissionIds);
+    const result = await adminService.syncRolePermissions(roleId, permissionIds, getAuditContext(req));
 
     if (!result.success) {
         return res.status(400).json({

@@ -309,6 +309,8 @@ class AuthService {
             return {
                 success: true as const,
                 ...tokens,
+                userId,
+                roleKey: roleDbKey,
             };
         });
 
@@ -430,7 +432,7 @@ class AuthService {
         };
     };
 
-    logout = async (userId: string, roleId: string, app: string): Promise<{ success: boolean; message: string; unauthorized?: boolean }> => {
+    logout = async (userId: string, roleId: string, app: string): Promise<{ success: boolean; message: string; unauthorized?: boolean; roleKey?: string }> => {
         const expectedRoleKey = APP_ROLE_MAP[app];
         if (!expectedRoleKey) {
             return { success: false, message: "Invalid app", unauthorized: true };
@@ -445,7 +447,7 @@ class AuthService {
             { userId, app, isActive: true },
             { isActive: false }
         );
-        return { success: true, message: "Logged out successfully" };
+        return { success: true, message: "Logged out successfully", roleKey: role.key };
     };
 
     /**

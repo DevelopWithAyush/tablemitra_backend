@@ -59,7 +59,21 @@ export type AuditAction =
     // Guest Session Actions
     | "GUEST_CHECKED_IN"
     | "GUEST_CHECKED_OUT"
-    | "GUEST_SESSION_TRANSFERRED";
+    | "GUEST_SESSION_TRANSFERRED"
+    // Admin / RBAC Actions
+    | "ROLE_CREATED"
+    | "ROLE_UPDATED"
+    | "ROLE_DELETED"
+    | "PERMISSION_CREATED"
+    | "PERMISSION_UPDATED"
+    | "PERMISSION_DELETED"
+    | "ROLE_PERMISSIONS_ASSIGNED"
+    | "ROLE_PERMISSIONS_SYNCED"
+    // QR Code Actions (hotel-scoped)
+    | "QR_CODES_GENERATED"
+    | "QR_CODE_ADDED"
+    | "QR_CODE_STATUS_CHANGED"
+    | "QR_CODE_DELETED";
 
 export type EntityType =
     | "FOOD_ORDER"
@@ -77,7 +91,9 @@ export type EntityType =
     | "FOUNDER"
     | "ADMIN"
     | "CUSTOMER_CARE"
-    | "SALES";
+    | "SALES"
+    | "ROLE"
+    | "PERMISSION";
 
 export type ActorRole =
     | "CUSTOMER"

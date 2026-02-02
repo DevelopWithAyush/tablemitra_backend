@@ -11,6 +11,29 @@ import type {
     ScanQrCodeParams,
     GetLocationsQuery
 } from "./qr-code.types.js";
+import type { QrCodeAuditContext } from "./qr-code.types.js";
+import type { ActorRole } from "../audit/audit.types.js";
+import { IJwtPayload } from "../auth/auth.types.js";
+
+function getAuditContext(req: Request): QrCodeAuditContext {
+    const user = (req as Request & { user: IJwtPayload }).user;
+    const app = req.params.app;
+    const panel = typeof app === "string" ? app : app?.[0];
+    const roleByApp: Record<string, ActorRole> = {
+        sales: "SALES",
+        founder: "FOUNDER",
+        admin: "ADMIN",
+        manager: "MANAGER",
+        frontdesk: "FRONTDESK_STAFF",
+        kitchen: "KITCHEN_STAFF",
+        "room-service": "ROOM_SERVICE_STAFF",
+    };
+    const role: ActorRole = (panel && roleByApp[panel]) || "ADMIN";
+    return {
+        actor: { userId: user.sub, role },
+        context: { ip: req.ip, userAgent: req.get("User-Agent") ?? undefined, panel },
+    };
+}
 
 /**
  * QR Code Controller
@@ -51,7 +74,7 @@ class QrCodeController {
         const { hotelId } = req.params as unknown as HotelIdParams;
         const input = req.body as IGenerateQrCodesInput;
 
-        const result = await qrCodeService.generateQrCodes(hotelId, input);
+        const result = await qrCodeService.generateQrCodes(hotelId, input, getAuditContext(req));
 
         if (!result.success) {
             return res.status(400).json({
@@ -99,7 +122,7 @@ class QrCodeController {
         const { hotelId } = req.params as unknown as HotelIdParams;
         const input = req.body as IAddSingleQrCodeInput;
 
-        const result = await qrCodeService.addSingleQrCode(hotelId, input);
+        const result = await qrCodeService.addSingleQrCode(hotelId, input, getAuditContext(req));
 
         if (!result.success) {
             return res.status(400).json({
@@ -120,10 +143,10 @@ class QrCodeController {
      * PATCH /qr-codes/:codeId/status
      */
     toggleStatus = asyncHandler(async (req: Request, res: Response) => {
-        const { codeId } = req.params as unknown as { codeId: string };
+        const codeId = req.params.codeId as string;
         const { isActive, reason } = req.body as { isActive: boolean; reason?: string };
 
-        const result = await qrCodeService.toggleQrStatus(codeId, { isActive, reason });
+        const result = await qrCodeService.toggleQrStatus(codeId, { isActive, reason }, getAuditContext(req));
 
         if (!result.success) {
             return res.status(400).json({
@@ -143,10 +166,10 @@ class QrCodeController {
      * DELETE /qr-codes/:codeId
      */
     deleteQrCode = asyncHandler(async (req: Request, res: Response) => {
-        const { codeId } = req.params as { codeId: string };
+        const codeId = req.params.codeId as string;
         const { reason } = (req.body || {}) as { reason?: string };
 
-        const result = await qrCodeService.deleteQrCode(codeId, reason);
+        const result = await qrCodeService.deleteQrCode(codeId, reason, getAuditContext(req));
 
         if (!result.success) {
             return res.status(400).json({

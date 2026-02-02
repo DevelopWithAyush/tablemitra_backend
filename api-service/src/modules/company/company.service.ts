@@ -15,7 +15,10 @@ import {
     CreateResult,
     UpdateResult,
     DeleteResult,
+    CompanyAuditContext,
 } from "./company.types.js";
+import { publishAuditEvent } from "../audit/audit.publisher.js";
+import logger from "../../helpers/logger/index.js";
 
 // Cache keys
 const CACHE_KEYS = {
@@ -171,7 +174,7 @@ class CompanyService {
         return result;
     };
 
-    createAdmin = async (dto: CreateAdminDTO): Promise<CreateResult> => {
+    createAdmin = async (dto: CreateAdminDTO, auditContext?: CompanyAuditContext): Promise<CreateResult> => {
         // Check if email already exists
         const existingEmail = await Admin.findOne({ email: dto.email });
         if (existingEmail) {
@@ -193,17 +196,29 @@ class CompanyService {
 
         await invalidateListCache(CACHE_KEYS.ADMIN_LIST);
 
+        if (auditContext) {
+            publishAuditEvent(
+                "STAFF_CREATED",
+                "ADMIN",
+                admin._id.toString(),
+                auditContext.actor,
+                { context: auditContext.context, newData: { name: admin.name, email: admin.email } }
+            ).catch((err) => logger.error("Audit publish failed:", err));
+        }
+
         return {
             success: true,
             profile: admin.toObject(),
         };
     };
 
-    updateAdmin = async (id: string, dto: UpdateAdminDTO): Promise<UpdateResult> => {
+    updateAdmin = async (id: string, dto: UpdateAdminDTO, auditContext?: CompanyAuditContext): Promise<UpdateResult> => {
         const admin = await Admin.findById(id);
         if (!admin) {
             return { success: false, message: "Admin not found" };
         }
+
+        const previousData = { name: admin.name, email: admin.email, isActive: admin.isActive };
 
         if (dto.email && dto.email !== admin.email) {
             const existingEmail = await Admin.findOne({ email: dto.email, _id: { $ne: id } });
@@ -225,14 +240,30 @@ class CompanyService {
             invalidateListCache(CACHE_KEYS.ADMIN_LIST),
         ]);
 
+        if (auditContext) {
+            publishAuditEvent(
+                "STAFF_UPDATED",
+                "ADMIN",
+                id,
+                auditContext.actor,
+                {
+                    context: auditContext.context,
+                    previousData,
+                    newData: { name: admin.name, email: admin.email, isActive: admin.isActive },
+                }
+            ).catch((err) => logger.error("Audit publish failed:", err));
+        }
+
         return { success: true, profile: admin.toObject() };
     };
 
-    deleteAdmin = async (id: string): Promise<DeleteResult> => {
+    deleteAdmin = async (id: string, auditContext?: CompanyAuditContext): Promise<DeleteResult> => {
         const admin = await Admin.findById(id);
         if (!admin) {
             return { success: false, message: "Admin not found" };
         }
+
+        const previousData = { name: admin.name, email: admin.email, isActive: admin.isActive };
 
         admin.isActive = false;
         await admin.save();
@@ -242,6 +273,16 @@ class CompanyService {
             redis.del(CACHE_KEYS.ADMIN_BY_ID(id)),
             invalidateListCache(CACHE_KEYS.ADMIN_LIST),
         ]);
+
+        if (auditContext) {
+            publishAuditEvent(
+                "STAFF_DELETED",
+                "ADMIN",
+                id,
+                auditContext.actor,
+                { context: auditContext.context, previousData }
+            ).catch((err) => logger.error("Audit publish failed:", err));
+        }
 
         return { success: true, message: "Admin deactivated successfully" };
     };
@@ -333,7 +374,7 @@ class CompanyService {
         return result;
     };
 
-    createCustomerCare = async (dto: CreateCustomerCareDTO): Promise<CreateResult> => {
+    createCustomerCare = async (dto: CreateCustomerCareDTO, auditContext?: CompanyAuditContext): Promise<CreateResult> => {
         // Check if email already exists
         const existingEmail = await CustomerCare.findOne({ email: dto.email });
         if (existingEmail) {
@@ -360,17 +401,42 @@ class CompanyService {
 
         await invalidateListCache(CACHE_KEYS.CUSTOMER_CARE_LIST);
 
+        if (auditContext) {
+            publishAuditEvent(
+                "STAFF_CREATED",
+                "CUSTOMER_CARE",
+                customerCare._id.toString(),
+                auditContext.actor,
+                {
+                    context: auditContext.context,
+                    newData: {
+                        name: customerCare.name,
+                        email: customerCare.email,
+                        employeeCode: customerCare.employeeCode,
+                        designation: customerCare.designation,
+                    },
+                }
+            ).catch((err) => logger.error("Audit publish failed:", err));
+        }
+
         return {
             success: true,
             profile: customerCare.toObject(),
         };
     };
 
-    updateCustomerCare = async (id: string, dto: UpdateCustomerCareDTO): Promise<UpdateResult> => {
+    updateCustomerCare = async (id: string, dto: UpdateCustomerCareDTO, auditContext?: CompanyAuditContext): Promise<UpdateResult> => {
         const customerCare = await CustomerCare.findById(id);
         if (!customerCare) {
             return { success: false, message: "Customer care not found" };
         }
+
+        const previousData = {
+            name: customerCare.name,
+            email: customerCare.email,
+            designation: customerCare.designation,
+            isActive: customerCare.isActive,
+        };
 
         if (dto.email && dto.email !== customerCare.email) {
             const existingEmail = await CustomerCare.findOne({ email: dto.email, _id: { $ne: id } });
@@ -393,14 +459,40 @@ class CompanyService {
             invalidateListCache(CACHE_KEYS.CUSTOMER_CARE_LIST),
         ]);
 
+        if (auditContext) {
+            publishAuditEvent(
+                "STAFF_UPDATED",
+                "CUSTOMER_CARE",
+                id,
+                auditContext.actor,
+                {
+                    context: auditContext.context,
+                    previousData,
+                    newData: {
+                        name: customerCare.name,
+                        email: customerCare.email,
+                        designation: customerCare.designation,
+                        isActive: customerCare.isActive,
+                    },
+                }
+            ).catch((err) => logger.error("Audit publish failed:", err));
+        }
+
         return { success: true, profile: customerCare.toObject() };
     };
 
-    deleteCustomerCare = async (id: string): Promise<DeleteResult> => {
+    deleteCustomerCare = async (id: string, auditContext?: CompanyAuditContext): Promise<DeleteResult> => {
         const customerCare = await CustomerCare.findById(id);
         if (!customerCare) {
             return { success: false, message: "Customer care not found" };
         }
+
+        const previousData = {
+            name: customerCare.name,
+            email: customerCare.email,
+            employeeCode: customerCare.employeeCode,
+            isActive: customerCare.isActive,
+        };
 
         customerCare.isActive = false;
         await customerCare.save();
@@ -410,6 +502,16 @@ class CompanyService {
             redis.del(CACHE_KEYS.CUSTOMER_CARE_BY_ID(id)),
             invalidateListCache(CACHE_KEYS.CUSTOMER_CARE_LIST),
         ]);
+
+        if (auditContext) {
+            publishAuditEvent(
+                "STAFF_DELETED",
+                "CUSTOMER_CARE",
+                id,
+                auditContext.actor,
+                { context: auditContext.context, previousData }
+            ).catch((err) => logger.error("Audit publish failed:", err));
+        }
 
         return { success: true, message: "Customer care deactivated successfully" };
     };
@@ -501,7 +603,7 @@ class CompanyService {
         return result;
     };
 
-    createSales = async (dto: CreateSalesDTO): Promise<CreateResult> => {
+    createSales = async (dto: CreateSalesDTO, auditContext?: CompanyAuditContext): Promise<CreateResult> => {
         // Check if email already exists
         const existingEmail = await SalesProfile.findOne({ email: dto.email });
         if (existingEmail) {
@@ -527,17 +629,36 @@ class CompanyService {
 
         await invalidateListCache(CACHE_KEYS.SALES_LIST);
 
+        if (auditContext) {
+            publishAuditEvent(
+                "STAFF_CREATED",
+                "SALES",
+                sales._id.toString(),
+                auditContext.actor,
+                {
+                    context: auditContext.context,
+                    newData: {
+                        name: sales.name,
+                        email: sales.email,
+                        employeeCode: sales.employeeCode,
+                    },
+                }
+            ).catch((err) => logger.error("Audit publish failed:", err));
+        }
+
         return {
             success: true,
             profile: sales.toObject(),
         };
     };
 
-    updateSales = async (id: string, dto: UpdateSalesDTO): Promise<UpdateResult> => {
+    updateSales = async (id: string, dto: UpdateSalesDTO, auditContext?: CompanyAuditContext): Promise<UpdateResult> => {
         const sales = await SalesProfile.findById(id);
         if (!sales) {
             return { success: false, message: "Sales person not found" };
         }
+
+        const previousData = { name: sales.name, email: sales.email, isActive: sales.isActive };
 
         if (dto.email && dto.email !== sales.email) {
             const existingEmail = await SalesProfile.findOne({ email: dto.email, _id: { $ne: id } });
@@ -559,14 +680,30 @@ class CompanyService {
             invalidateListCache(CACHE_KEYS.SALES_LIST),
         ]);
 
+        if (auditContext) {
+            publishAuditEvent(
+                "STAFF_UPDATED",
+                "SALES",
+                id,
+                auditContext.actor,
+                {
+                    context: auditContext.context,
+                    previousData,
+                    newData: { name: sales.name, email: sales.email, isActive: sales.isActive },
+                }
+            ).catch((err) => logger.error("Audit publish failed:", err));
+        }
+
         return { success: true, profile: sales.toObject() };
     };
 
-    deleteSales = async (id: string): Promise<DeleteResult> => {
+    deleteSales = async (id: string, auditContext?: CompanyAuditContext): Promise<DeleteResult> => {
         const sales = await SalesProfile.findById(id);
         if (!sales) {
             return { success: false, message: "Sales person not found" };
         }
+
+        const previousData = { name: sales.name, email: sales.email, isActive: sales.isActive };
 
         sales.isActive = false;
         await sales.save();
@@ -576,6 +713,16 @@ class CompanyService {
             redis.del(CACHE_KEYS.SALES_BY_ID(id)),
             invalidateListCache(CACHE_KEYS.SALES_LIST),
         ]);
+
+        if (auditContext) {
+            publishAuditEvent(
+                "STAFF_DELETED",
+                "SALES",
+                id,
+                auditContext.actor,
+                { context: auditContext.context, previousData }
+            ).catch((err) => logger.error("Audit publish failed:", err));
+        }
 
         return { success: true, message: "Sales person deactivated successfully" };
     };

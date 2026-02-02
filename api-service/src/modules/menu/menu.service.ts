@@ -19,8 +19,10 @@ import {
     ICategoryWithItems,
     IFullMenu,
     VariantPriceRange,
+    MenuAuditContext,
 } from "./menu.types.js";
 import logger from "../../helpers/logger/index.js";
+import { publishAuditEvent } from "../audit/audit.publisher.js";
 
 // ==================== CACHE CONFIGURATION ====================
 
@@ -173,7 +175,8 @@ class MenuService {
      */
     createCategory = async (
         hotelId: string,
-        dto: CreateCategoryDTO
+        dto: CreateCategoryDTO,
+        auditContext?: MenuAuditContext
     ): Promise<ServiceResult<ICategory>> => {
         try {
             // Check for duplicate name in same hotel
@@ -199,6 +202,16 @@ class MenuService {
             // Invalidate cache
             await invalidateMenuCache(hotelId);
 
+            if (auditContext) {
+                publishAuditEvent(
+                    "MENU_CATEGORY_CREATED",
+                    "MENU_CATEGORY",
+                    category._id.toString(),
+                    auditContext.actor,
+                    { context: { ...auditContext.context, hotelId }, newData: { name: category.name } }
+                ).catch((err) => logger.error("Audit publish failed:", err));
+            }
+
             logger.info(`Category created: ${category._id} for hotel: ${hotelId}`);
 
             return {
@@ -220,7 +233,8 @@ class MenuService {
     updateCategory = async (
         hotelId: string,
         categoryId: string,
-        dto: UpdateCategoryDTO
+        dto: UpdateCategoryDTO,
+        auditContext?: MenuAuditContext
     ): Promise<ServiceResult<ICategory>> => {
         try {
             const category = await CategoryModel.findOne({
@@ -267,6 +281,16 @@ class MenuService {
             // Invalidate cache
             await invalidateMenuCache(hotelId);
 
+            if (auditContext) {
+                publishAuditEvent(
+                    "MENU_CATEGORY_UPDATED",
+                    "MENU_CATEGORY",
+                    categoryId,
+                    auditContext.actor,
+                    { context: { ...auditContext.context, hotelId }, newData: { name: category.name, isActive: category.isActive } }
+                ).catch((err) => logger.error("Audit publish failed:", err));
+            }
+
             logger.info(`Category updated: ${categoryId}`);
 
             return {
@@ -285,7 +309,7 @@ class MenuService {
     /**
      * Toggle category active status
      */
-    toggleCategory = async (hotelId: string, categoryId: string): Promise<ToggleResult> => {
+    toggleCategory = async (hotelId: string, categoryId: string, auditContext?: MenuAuditContext): Promise<ToggleResult> => {
         try {
             const category = await CategoryModel.findOne({
                 _id: new Types.ObjectId(categoryId),
@@ -301,6 +325,16 @@ class MenuService {
 
             // Invalidate cache
             await invalidateMenuCache(hotelId);
+
+            if (auditContext) {
+                publishAuditEvent(
+                    "MENU_CATEGORY_UPDATED",
+                    "MENU_CATEGORY",
+                    categoryId,
+                    auditContext.actor,
+                    { context: { ...auditContext.context, hotelId }, newData: { isActive: category.isActive } }
+                ).catch((err) => logger.error("Audit publish failed:", err));
+            }
 
             logger.info(`Category toggled: ${categoryId}, isActive: ${category.isActive}`);
 
@@ -451,7 +485,8 @@ class MenuService {
     createItem = async (
         hotelId: string,
         categoryId: string,
-        dto: CreateItemDTO
+        dto: CreateItemDTO,
+        auditContext?: MenuAuditContext
     ): Promise<ServiceResult<IItemWithVariants>> => {
         try {
             // Verify category exists
@@ -524,6 +559,16 @@ class MenuService {
             // Invalidate cache
             await invalidateMenuCache(hotelId);
 
+            if (auditContext) {
+                publishAuditEvent(
+                    "MENU_ITEM_CREATED",
+                    "MENU_ITEM",
+                    item._id.toString(),
+                    auditContext.actor,
+                    { context: { ...auditContext.context, hotelId }, newData: { name: item.name, shortCode: item.shortCode, categoryId } }
+                ).catch((err) => logger.error("Audit publish failed:", err));
+            }
+
             logger.info(`Item created: ${item._id} for hotel: ${hotelId}`);
 
             return {
@@ -548,7 +593,8 @@ class MenuService {
     updateItem = async (
         hotelId: string,
         itemId: string,
-        dto: UpdateItemDTO
+        dto: UpdateItemDTO,
+        auditContext?: MenuAuditContext
     ): Promise<ServiceResult<IItemWithVariants>> => {
         try {
             const item = await ItemModel.findOne({
@@ -656,6 +702,16 @@ class MenuService {
             // Invalidate cache
             await invalidateMenuCache(hotelId);
 
+            if (auditContext) {
+                publishAuditEvent(
+                    "MENU_ITEM_UPDATED",
+                    "MENU_ITEM",
+                    itemId,
+                    auditContext.actor,
+                    { context: { ...auditContext.context, hotelId } }
+                ).catch((err) => logger.error("Audit publish failed:", err));
+            }
+
             logger.info(`Item updated: ${itemId}`);
 
             return updatedItem;
@@ -671,7 +727,7 @@ class MenuService {
     /**
      * Toggle item active status
      */
-    toggleItem = async (hotelId: string, itemId: string): Promise<ToggleResult> => {
+    toggleItem = async (hotelId: string, itemId: string, auditContext?: MenuAuditContext): Promise<ToggleResult> => {
         try {
             const item = await ItemModel.findOne({
                 _id: new Types.ObjectId(itemId),
@@ -687,6 +743,16 @@ class MenuService {
 
             // Invalidate cache
             await invalidateMenuCache(hotelId);
+
+            if (auditContext) {
+                publishAuditEvent(
+                    "MENU_ITEM_AVAILABILITY_CHANGED",
+                    "MENU_ITEM",
+                    itemId,
+                    auditContext.actor,
+                    { context: { ...auditContext.context, hotelId }, newData: { isActive: item.isActive } }
+                ).catch((err) => logger.error("Audit publish failed:", err));
+            }
 
             logger.info(`Item toggled: ${itemId}, isActive: ${item.isActive}`);
 

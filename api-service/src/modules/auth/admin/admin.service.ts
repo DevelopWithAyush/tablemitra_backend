@@ -8,11 +8,14 @@ import {
     ICreatePermissionInput,
     IRoleWithPermissions,
     PERMISSION_CACHE_TTL,
+    AdminAuditContext,
 } from "./admin.types.js";
 import {
     invalidateRolePermissionCache,
     invalidateAllPermissionsCache,
 } from "./permission-cache.service.js";
+import { publishAuditEvent } from "../../audit/audit.publisher.js";
+import logger from "../../../helpers/logger/index.js";
 
 // Cache keys
 const CACHE_KEYS = {
@@ -191,7 +194,8 @@ export const getRoleById = async (
 };
 
 export const createRole = async (
-    input: ICreateRoleInput
+    input: ICreateRoleInput,
+    auditContext?: AdminAuditContext
 ): Promise<{ success: boolean; role?: IRoleWithPermissions; message?: string }> => {
     const existing = await Role.findOne({ key: input.key });
     if (existing) {
@@ -208,6 +212,16 @@ export const createRole = async (
     // Invalidate list cache
     await invalidateRolesListCache();
 
+    if (auditContext) {
+        publishAuditEvent(
+            "ROLE_CREATED",
+            "ROLE",
+            role._id.toString(),
+            auditContext.actor,
+            { context: auditContext.context, newData: { key: role.key, scope: role.scope, level: role.level } }
+        ).catch((err) => logger.error("Audit publish failed:", err));
+    }
+
     return {
         success: true,
         role: {
@@ -223,12 +237,15 @@ export const createRole = async (
 
 export const updateRole = async (
     roleId: string,
-    input: Partial<ICreateRoleInput>
+    input: Partial<ICreateRoleInput>,
+    auditContext?: AdminAuditContext
 ): Promise<{ success: boolean; role?: IRoleWithPermissions; message?: string }> => {
     const role = await Role.findById(roleId);
     if (!role) {
         return { success: false, message: "Role not found" };
     }
+
+    const previousData = { key: role.key, scope: role.scope, level: role.level };
 
     if (input.key && input.key !== role.key) {
         const existing = await Role.findOne({ key: input.key, _id: { $ne: roleId } });
@@ -251,16 +268,33 @@ export const updateRole = async (
         invalidateRolePermissionCache(roleId),
     ]);
 
+    if (auditContext) {
+        publishAuditEvent(
+            "ROLE_UPDATED",
+            "ROLE",
+            roleId,
+            auditContext.actor,
+            {
+                context: auditContext.context,
+                previousData,
+                newData: { key: role.key, scope: role.scope, level: role.level },
+            }
+        ).catch((err) => logger.error("Audit publish failed:", err));
+    }
+
     return { success: true, role: await getRoleById(roleId) as IRoleWithPermissions };
 };
 
 export const deleteRole = async (
-    roleId: string
+    roleId: string,
+    auditContext?: AdminAuditContext
 ): Promise<{ success: boolean; message?: string }> => {
     const role = await Role.findById(roleId);
     if (!role) {
         return { success: false, message: "Role not found" };
     }
+
+    const previousData = { key: role.key, scope: role.scope, level: role.level, isActive: role.isActive };
 
     role.isActive = false;
     await role.save();
@@ -272,6 +306,16 @@ export const deleteRole = async (
         invalidateRolesListCache(),
         invalidateRolePermissionCache(roleId),
     ]);
+
+    if (auditContext) {
+        publishAuditEvent(
+            "ROLE_DELETED",
+            "ROLE",
+            roleId,
+            auditContext.actor,
+            { context: auditContext.context, previousData }
+        ).catch((err) => logger.error("Audit publish failed:", err));
+    }
 
     return { success: true };
 };
@@ -356,7 +400,8 @@ export const getPermissionById = async (
 };
 
 export const createPermission = async (
-    input: ICreatePermissionInput
+    input: ICreatePermissionInput,
+    auditContext?: AdminAuditContext
 ): Promise<{ success: boolean; permission?: { _id: Types.ObjectId; key: string; description: string }; message?: string }> => {
     const existing = await Permission.findOne({ key: input.key });
     if (existing) {
@@ -375,6 +420,16 @@ export const createPermission = async (
         invalidateAllPermissionsCache(),
     ]);
 
+    if (auditContext) {
+        publishAuditEvent(
+            "PERMISSION_CREATED",
+            "PERMISSION",
+            permission._id.toString(),
+            auditContext.actor,
+            { context: auditContext.context, newData: { key: permission.key, description: permission.description } }
+        ).catch((err) => logger.error("Audit publish failed:", err));
+    }
+
     return {
         success: true,
         permission: {
@@ -387,12 +442,15 @@ export const createPermission = async (
 
 export const updatePermission = async (
     permissionId: string,
-    input: Partial<ICreatePermissionInput>
+    input: Partial<ICreatePermissionInput>,
+    auditContext?: AdminAuditContext
 ): Promise<{ success: boolean; permission?: { _id: Types.ObjectId; key: string; description: string }; message?: string }> => {
     const permission = await Permission.findById(permissionId);
     if (!permission) {
         return { success: false, message: "Permission not found" };
     }
+
+    const previousData = { key: permission.key, description: permission.description };
 
     if (input.key && input.key !== permission.key) {
         const existing = await Permission.findOne({ key: input.key, _id: { $ne: permissionId } });
@@ -414,6 +472,20 @@ export const updatePermission = async (
         invalidateAllPermissionsCache(),
     ]);
 
+    if (auditContext) {
+        publishAuditEvent(
+            "PERMISSION_UPDATED",
+            "PERMISSION",
+            permissionId,
+            auditContext.actor,
+            {
+                context: auditContext.context,
+                previousData,
+                newData: { key: permission.key, description: permission.description },
+            }
+        ).catch((err) => logger.error("Audit publish failed:", err));
+    }
+
     return {
         success: true,
         permission: {
@@ -425,12 +497,15 @@ export const updatePermission = async (
 };
 
 export const deletePermission = async (
-    permissionId: string
+    permissionId: string,
+    auditContext?: AdminAuditContext
 ): Promise<{ success: boolean; message?: string }> => {
     const permission = await Permission.findById(permissionId);
     if (!permission) {
         return { success: false, message: "Permission not found" };
     }
+
+    const previousData = { key: permission.key, description: permission.description, isActive: permission.isActive };
 
     permission.isActive = false;
     await permission.save();
@@ -443,6 +518,16 @@ export const deletePermission = async (
         invalidateAllPermissionsCache(),
     ]);
 
+    if (auditContext) {
+        publishAuditEvent(
+            "PERMISSION_DELETED",
+            "PERMISSION",
+            permissionId,
+            auditContext.actor,
+            { context: auditContext.context, previousData }
+        ).catch((err) => logger.error("Audit publish failed:", err));
+    }
+
     return { success: true };
 };
 
@@ -450,7 +535,8 @@ export const deletePermission = async (
 
 export const assignPermissionsToRole = async (
     roleId: string,
-    permissionIds: string[]
+    permissionIds: string[],
+    auditContext?: AdminAuditContext
 ): Promise<{ success: boolean; message?: string; assigned?: number }> => {
     const role = await Role.findById(roleId);
     if (!role) {
@@ -484,12 +570,26 @@ export const assignPermissionsToRole = async (
         invalidateRolePermissionCache(roleId),
     ]);
 
+    if (auditContext) {
+        publishAuditEvent(
+            "ROLE_PERMISSIONS_ASSIGNED",
+            "ROLE",
+            roleId,
+            auditContext.actor,
+            {
+                context: auditContext.context,
+                newData: { permissionIds, assignedCount: validPermissions.length },
+            }
+        ).catch((err) => logger.error("Audit publish failed:", err));
+    }
+
     return { success: true, assigned: validPermissions.length };
 };
 
 export const removePermissionFromRole = async (
     roleId: string,
-    permissionId: string
+    permissionId: string,
+    auditContext?: AdminAuditContext
 ): Promise<{ success: boolean; message?: string }> => {
     const result = await RolePermission.deleteOne({
         roleId: new Types.ObjectId(roleId),
@@ -508,12 +608,23 @@ export const removePermissionFromRole = async (
         invalidateRolePermissionCache(roleId),
     ]);
 
+    if (auditContext) {
+        publishAuditEvent(
+            "ROLE_PERMISSIONS_SYNCED",
+            "ROLE",
+            roleId,
+            auditContext.actor,
+            { context: auditContext.context, metadata: { removedPermissionId: permissionId } }
+        ).catch((err) => logger.error("Audit publish failed:", err));
+    }
+
     return { success: true };
 };
 
 export const syncRolePermissions = async (
     roleId: string,
-    permissionIds: string[]
+    permissionIds: string[],
+    auditContext?: AdminAuditContext
 ): Promise<{ success: boolean; message?: string; added?: number; removed?: number }> => {
     const role = await Role.findById(roleId);
     if (!role) {
@@ -557,6 +668,19 @@ export const syncRolePermissions = async (
         invalidateRolesListCache(),
         invalidateRolePermissionCache(roleId),
     ]);
+
+    if (auditContext) {
+        publishAuditEvent(
+            "ROLE_PERMISSIONS_SYNCED",
+            "ROLE",
+            roleId,
+            auditContext.actor,
+            {
+                context: auditContext.context,
+                newData: { permissionIds, added: toAdd.length, removed: toRemove.length },
+            }
+        ).catch((err) => logger.error("Audit publish failed:", err));
+    }
 
     return { success: true, added: toAdd.length, removed: toRemove.length };
 };

@@ -1,4 +1,5 @@
 import { Types } from "mongoose";
+import type { AuditEventActor, AuditEventContext } from "../audit/audit.types.js";
 
 // Re-export DTOs from validator
 export type {
@@ -10,6 +11,12 @@ export type {
     UpdateSalesDTO,
     PaginationDTO,
 } from "./validator/company.validator.js";
+
+/** Passed from controller so service can publish audit events (actor + request context). */
+export interface CompanyAuditContext {
+    actor: AuditEventActor;
+    context?: AuditEventContext;
+}
 
 // ==================== PROFILE INTERFACES ====================
 

@@ -17,7 +17,10 @@ import {
     HotelListItem,
     StaffListItem,
     ChainMemberListItem,
+    HospitalityAuditContext,
 } from "./hospitality.types.js";
+import { publishAuditEvent } from "../audit/audit.publisher.js";
+import logger from "../../helpers/logger/index.js";
 
 // ==================== Helper Functions ====================
 
@@ -244,9 +247,10 @@ class HospitalityService {
             founderEmail?: string;
             founderDesignation?: string;
         },
-        createdBy: string
+        createdBy: string,
+        auditContext?: HospitalityAuditContext
     ): Promise<ServiceResult<OnboardChainResult>> => {
-        return await runInTransaction(async (session: ClientSession) => {
+        const result = await runInTransaction(async (session: ClientSession) => {
             // Check if chain name already exists
             const existingChain = await Chain.findOne({ name: data.chainName }).session(session);
             if (existingChain) {
@@ -309,6 +313,20 @@ class HospitalityService {
                 },
             };
         });
+
+        if (result.success && result.data != null && auditContext) {
+            publishAuditEvent(
+                "CHAIN_CREATED",
+                "CHAIN",
+                result.data.chainId,
+                auditContext.actor,
+                {
+                    context: { ...auditContext.context, chainId: result.data.chainId },
+                    newData: { name: data.chainName, founderId: result.data.founderId },
+                }
+            ).catch((err) => logger.error("Audit publish failed:", err));
+        }
+        return result as ServiceResult<OnboardChainResult>;
     };
 
     /**
@@ -339,9 +357,10 @@ class HospitalityService {
             settings?: Record<string, unknown>;
             panelSettings?: Record<string, unknown>;
         },
-        createdBy: string
+        createdBy: string,
+        auditContext?: HospitalityAuditContext
     ): Promise<ServiceResult<OnboardHotelResult>> => {
-        return await runInTransaction(async (session: ClientSession) => {
+        const result = await runInTransaction(async (session: ClientSession) => {
             // Check chain exists
             const chain = await Chain.findById(chainId).session(session);
             if (!chain || chain.isDeleted) {
@@ -422,6 +441,24 @@ class HospitalityService {
                 },
             };
         });
+
+        if (result.success && result.data != null && auditContext) {
+            publishAuditEvent(
+                "HOTEL_CREATED",
+                "HOTEL",
+                result.data.hotelId,
+                auditContext.actor,
+                {
+                    context: {
+                        ...auditContext.context,
+                        chainId,
+                        hotelId: result.data.hotelId,
+                    },
+                    newData: { name: data.name, chainId, managerId: result.data.managerId },
+                }
+            ).catch((err) => logger.error("Audit publish failed:", err));
+        }
+        return result as ServiceResult<OnboardHotelResult>;
     };
 
     /**
@@ -433,9 +470,10 @@ class HospitalityService {
             name: string;
             description?: string;
             settings?: Record<string, unknown>;
-        }
+        },
+        auditContext?: HospitalityAuditContext
     ): Promise<ServiceResult<{ chainId: string }>> => {
-        return await runInTransaction(async (session: ClientSession) => {
+        const result = await runInTransaction(async (session: ClientSession) => {
             // Check if chain name exists
             const existingChain = await Chain.findOne({ name: data.name }).session(session);
             if (existingChain) {
@@ -478,6 +516,20 @@ class HospitalityService {
                 data: { chainId: chain._id.toString() },
             };
         });
+
+        if (result.success && result.data != null && auditContext) {
+            publishAuditEvent(
+                "CHAIN_CREATED",
+                "CHAIN",
+                result.data.chainId,
+                auditContext.actor,
+                {
+                    context: { ...auditContext.context, chainId: result.data.chainId },
+                    newData: { name: data.name },
+                }
+            ).catch((err) => logger.error("Audit publish failed:", err));
+        }
+        return result as ServiceResult<{ chainId: string }>;
     };
 
     /**
@@ -492,9 +544,10 @@ class HospitalityService {
             designation?: string;
             role: "CO_OWNER" | "DIRECTOR" | "PARTNER";
         },
-        invitedBy: string
+        invitedBy: string,
+        auditContext?: HospitalityAuditContext
     ): Promise<ServiceResult<AddMemberResult>> => {
-        return await runInTransaction(async (session: ClientSession) => {
+        const result = await runInTransaction(async (session: ClientSession) => {
             // Check chain exists
             const chain = await Chain.findById(chainId).session(session);
             if (!chain || chain.isDeleted) {
@@ -558,6 +611,20 @@ class HospitalityService {
                 },
             };
         });
+
+        if (result.success && result.data != null && auditContext) {
+            publishAuditEvent(
+                "CHAIN_UPDATED",
+                "CHAIN",
+                chainId,
+                auditContext.actor,
+                {
+                    context: { ...auditContext.context, chainId },
+                    newData: { memberAdded: data.role, founderId: result.data.founderId },
+                }
+            ).catch((err) => logger.error("Audit publish failed:", err));
+        }
+        return result as ServiceResult<AddMemberResult>;
     };
 
     /**
@@ -571,9 +638,10 @@ class HospitalityService {
             email?: string;
             designation: "FRONTDESK" | "KITCHEN" | "ROOM_SERVICE" | "HOUSEKEEPING";
         },
-        createdBy: string
+        createdBy: string,
+        auditContext?: HospitalityAuditContext
     ): Promise<ServiceResult<OnboardStaffResult>> => {
-        return await runInTransaction(async (session: ClientSession) => {
+        const result = await runInTransaction(async (session: ClientSession) => {
             // Check hotel exists
             const hotel = await Hotel.findById(hotelId).session(session);
             if (!hotel || hotel.isDeleted) {
@@ -627,6 +695,24 @@ class HospitalityService {
                 },
             };
         });
+
+        if (result.success && result.data != null && auditContext) {
+            publishAuditEvent(
+                "STAFF_CREATED",
+                "STAFF",
+                result.data.staffId,
+                auditContext.actor,
+                {
+                    context: { ...auditContext.context, hotelId },
+                    newData: {
+                        name: data.name,
+                        designation: data.designation,
+                        employeeCode: result.data.employeeCode,
+                    },
+                }
+            ).catch((err) => logger.error("Audit publish failed:", err));
+        }
+        return result as ServiceResult<OnboardStaffResult>;
     };
 
     // ==================== List Methods ====================

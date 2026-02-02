@@ -1,6 +1,9 @@
 import { Request, Response } from "express";
 import { asyncHandler } from "../../utils/async-handler.js";
 import companyService from "./company.service.js";
+import type { CompanyAuditContext } from "./company.types.js";
+import type { IJwtPayload } from "../auth/auth.types.js";
+import type { ActorRole } from "../audit/audit.types.js";
 import {
     CreateAdminSchema,
     UpdateAdminSchema,
@@ -10,6 +13,16 @@ import {
     UpdateSalesSchema,
     PaginationSchema,
 } from "./validator/company.validator.js";
+
+function getAuditContext(req: Request): CompanyAuditContext {
+    const user = (req as Request & { user: IJwtPayload }).user;
+    const app = req.params.app;
+    const panel = typeof app === "string" ? app : app?.[0];
+    return {
+        actor: { userId: user.sub, role: "ADMIN" as ActorRole },
+        context: { ip: req.ip, userAgent: req.get("User-Agent") ?? undefined, panel },
+    };
+}
 
 // ==================== ADMIN CONTROLLERS ====================
 
@@ -24,7 +37,7 @@ export const getAdmins = asyncHandler(async (req: Request, res: Response) => {
 });
 
 export const getAdminById = asyncHandler(async (req: Request, res: Response) => {
-    const { id } = req.params;
+    const id = typeof req.params.id === "string" ? req.params.id : req.params.id?.[0] ?? "";
     const result = await companyService.getAdminById(id);
 
     if (!result.success) {
@@ -42,7 +55,7 @@ export const getAdminById = asyncHandler(async (req: Request, res: Response) => 
 
 export const createAdmin = asyncHandler(async (req: Request, res: Response) => {
     const dto = CreateAdminSchema.parse(req.body);
-    const result = await companyService.createAdmin(dto);
+    const result = await companyService.createAdmin(dto, getAuditContext(req));
 
     if (!result.success) {
         return res.status(400).json({
@@ -59,9 +72,9 @@ export const createAdmin = asyncHandler(async (req: Request, res: Response) => {
 });
 
 export const updateAdmin = asyncHandler(async (req: Request, res: Response) => {
-    const { id } = req.params;
+    const id = typeof req.params.id === "string" ? req.params.id : req.params.id?.[0] ?? "";
     const dto = UpdateAdminSchema.parse(req.body);
-    const result = await companyService.updateAdmin(id, dto);
+    const result = await companyService.updateAdmin(id, dto, getAuditContext(req));
 
     if (!result.success) {
         return res.status(400).json({
@@ -78,8 +91,8 @@ export const updateAdmin = asyncHandler(async (req: Request, res: Response) => {
 });
 
 export const deleteAdmin = asyncHandler(async (req: Request, res: Response) => {
-    const { id } = req.params;
-    const result = await companyService.deleteAdmin(id);
+    const id = typeof req.params.id === "string" ? req.params.id : req.params.id?.[0] ?? "";
+    const result = await companyService.deleteAdmin(id, getAuditContext(req));
 
     if (!result.success) {
         return res.status(400).json({
@@ -107,7 +120,7 @@ export const getCustomerCareList = asyncHandler(async (req: Request, res: Respon
 });
 
 export const getCustomerCareById = asyncHandler(async (req: Request, res: Response) => {
-    const { id } = req.params;
+    const id = typeof req.params.id === "string" ? req.params.id : req.params.id?.[0] ?? "";
     const result = await companyService.getCustomerCareById(id);
 
     if (!result.success) {
@@ -125,7 +138,7 @@ export const getCustomerCareById = asyncHandler(async (req: Request, res: Respon
 
 export const createCustomerCare = asyncHandler(async (req: Request, res: Response) => {
     const dto = CreateCustomerCareSchema.parse(req.body);
-    const result = await companyService.createCustomerCare(dto);
+    const result = await companyService.createCustomerCare(dto, getAuditContext(req));
 
     if (!result.success) {
         return res.status(400).json({
@@ -142,9 +155,9 @@ export const createCustomerCare = asyncHandler(async (req: Request, res: Respons
 });
 
 export const updateCustomerCare = asyncHandler(async (req: Request, res: Response) => {
-    const { id } = req.params;
+    const id = typeof req.params.id === "string" ? req.params.id : req.params.id?.[0] ?? "";
     const dto = UpdateCustomerCareSchema.parse(req.body);
-    const result = await companyService.updateCustomerCare(id, dto);
+    const result = await companyService.updateCustomerCare(id, dto, getAuditContext(req));
 
     if (!result.success) {
         return res.status(400).json({
@@ -161,8 +174,8 @@ export const updateCustomerCare = asyncHandler(async (req: Request, res: Respons
 });
 
 export const deleteCustomerCare = asyncHandler(async (req: Request, res: Response) => {
-    const { id } = req.params;
-    const result = await companyService.deleteCustomerCare(id);
+    const id = typeof req.params.id === "string" ? req.params.id : req.params.id?.[0] ?? "";
+    const result = await companyService.deleteCustomerCare(id, getAuditContext(req));
 
     if (!result.success) {
         return res.status(400).json({
@@ -190,7 +203,7 @@ export const getSalesList = asyncHandler(async (req: Request, res: Response) => 
 });
 
 export const getSalesById = asyncHandler(async (req: Request, res: Response) => {
-    const { id } = req.params;
+    const id = typeof req.params.id === "string" ? req.params.id : req.params.id?.[0] ?? "";
     const result = await companyService.getSalesById(id);
 
     if (!result.success) {
@@ -208,7 +221,7 @@ export const getSalesById = asyncHandler(async (req: Request, res: Response) => 
 
 export const createSales = asyncHandler(async (req: Request, res: Response) => {
     const dto = CreateSalesSchema.parse(req.body);
-    const result = await companyService.createSales(dto);
+    const result = await companyService.createSales(dto, getAuditContext(req));
 
     if (!result.success) {
         return res.status(400).json({
@@ -225,9 +238,9 @@ export const createSales = asyncHandler(async (req: Request, res: Response) => {
 });
 
 export const updateSales = asyncHandler(async (req: Request, res: Response) => {
-    const { id } = req.params;
+    const id = typeof req.params.id === "string" ? req.params.id : req.params.id?.[0] ?? "";
     const dto = UpdateSalesSchema.parse(req.body);
-    const result = await companyService.updateSales(id, dto);
+    const result = await companyService.updateSales(id, dto, getAuditContext(req));
 
     if (!result.success) {
         return res.status(400).json({
@@ -244,8 +257,8 @@ export const updateSales = asyncHandler(async (req: Request, res: Response) => {
 });
 
 export const deleteSales = asyncHandler(async (req: Request, res: Response) => {
-    const { id } = req.params;
-    const result = await companyService.deleteSales(id);
+    const id = typeof req.params.id === "string" ? req.params.id : req.params.id?.[0] ?? "";
+    const result = await companyService.deleteSales(id, getAuditContext(req));
 
     if (!result.success) {
         return res.status(400).json({
