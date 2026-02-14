@@ -1,0 +1,276 @@
+paths:
+  /api/v1/{app}/attachments/request-upload:
+    post:
+      tags:
+        - Attachments
+      summary: Request upload URL
+      description: |
+        Get a pre-signed S3 URL to upload a file. Creates a pending attachment record.
+        - Upload the file to the returned **uploadUrl** using HTTP PUT (same Content-Type and Content-Length as requested).
+        - Call **confirm-upload** with the returned **attachmentId** after a successful upload.
+        Pending uploads expire in 30 minutes if not confirmed.
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      parameters:
+        - name: app
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [admin, sales, founder, manager, frontdesk, kitchen, room-service]
+          description: Application context
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RequestUploadInput"
+      responses:
+        "201":
+          description: Upload URL generated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "Upload URL generated successfully"
+                  data:
+                    $ref: "#/components/schemas/UploadUrlResponse"
+        "400":
+          description: Bad request - invalid file name, type, or size
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Forbidden - requires CREATE_ATTACHMENT
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/v1/{app}/attachments/confirm-upload:
+    post:
+      tags:
+        - Attachments
+      summary: Confirm upload
+      description: |
+        Confirm that the file was uploaded to the pre-signed URL. Call this after successfully PUTting the file.
+        Updates attachment status to active. Only the uploader can confirm.
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      parameters:
+        - name: app
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [admin, sales, founder, manager, frontdesk, kitchen, room-service]
+          description: Application context
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConfirmUploadInput"
+      responses:
+        "200":
+          description: Upload confirmed successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "Upload confirmed successfully"
+                  data:
+                    $ref: "#/components/schemas/AttachmentResponse"
+        "400":
+          description: Attachment not found, expired, or unauthorized to confirm
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Forbidden - requires CREATE_ATTACHMENT
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/v1/{app}/attachments/{attachmentId}:
+    get:
+      tags:
+        - Attachments
+      summary: Get attachment by ID
+      description: Get attachment metadata and URL by ID.
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      parameters:
+        - name: app
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [admin, sales, founder, manager, frontdesk, kitchen, room-service]
+          description: Application context
+        - name: attachmentId
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^[0-9a-fA-F]{24}$'
+          description: Attachment ID (MongoDB ObjectId)
+      responses:
+        "200":
+          description: Attachment details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: "#/components/schemas/AttachmentResponse"
+        "404":
+          description: Attachment not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Forbidden - requires VIEW_ATTACHMENT
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+components:
+  schemas:
+    RequestUploadInput:
+      type: object
+      required:
+        - fileName
+        - fileType
+        - fileSize
+      properties:
+        fileName:
+          type: string
+          minLength: 1
+          maxLength: 255
+          example: "menu-item.jpg"
+          description: Original file name (no path, no .. or / or \)
+        fileType:
+          type: string
+          description: MIME type
+          enum:
+            - image/jpeg
+            - image/jpg
+            - image/png
+            - image/gif
+            - image/webp
+            - application/pdf
+            - application/msword
+            - application/vnd.openxmlformats-officedocument.wordprocessingml.document
+            - application/vnd.ms-excel
+            - application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+        fileSize:
+          type: integer
+          minimum: 1
+          maximum: 10485760
+          description: File size in bytes (max 10MB)
+
+    UploadUrlResponse:
+      type: object
+      properties:
+        uploadUrl:
+          type: string
+          format: uri
+          description: Pre-signed S3 PUT URL (expires in 1 hour)
+        attachmentId:
+          type: string
+          example: "507f1f77bcf86cd799439011"
+          description: Use this in confirm-upload after uploading
+        expiresIn:
+          type: integer
+          example: 3600
+          description: URL expiry in seconds
+
+    ConfirmUploadInput:
+      type: object
+      required:
+        - attachmentId
+      properties:
+        attachmentId:
+          type: string
+          pattern: '^[0-9a-fA-F]{24}$'
+          example: "507f1f77bcf86cd799439011"
+
+    AttachmentResponse:
+      type: object
+      properties:
+        _id:
+          type: string
+          example: "507f1f77bcf86cd799439011"
+        fileName:
+          type: string
+        fileType:
+          type: string
+        fileSize:
+          type: integer
+        storageKey:
+          type: string
+        bucket:
+          type: string
+        url:
+          type: string
+          format: uri
+          description: Public or CDN URL of the file
+        uploadedBy:
+          type: string
+          description: User ID (ObjectId)
+        status:
+          type: string
+          enum: [pending, active, inactive, deleted]
+        expiresAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time

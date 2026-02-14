@@ -80,6 +80,7 @@ class AuthController {
 
         // Get refresh token from cookie
         const refreshTokenValue = req.cookies[`refreshToken_${app}`];
+        logger.info(`refreshTokenValue: ${refreshTokenValue}`);
 
         if (!refreshTokenValue) {
             return res.status(401).json({

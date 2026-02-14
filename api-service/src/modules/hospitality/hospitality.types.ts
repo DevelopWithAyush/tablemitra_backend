@@ -149,6 +149,19 @@ export interface OnboardStaffResult {
     isNewUser: boolean;
 }
 
+export interface IGuestEntry {
+    name?: string;
+    phone?: string;
+}
+
+export interface CheckInGuestResult {
+    sessionId: string;
+    hotelId: string;
+    roomNumber: string;
+    checkInAt: Date;
+    guests: IGuestEntry[];
+}
+
 // ==================== List Results ====================
 
 export interface ChainListItem {

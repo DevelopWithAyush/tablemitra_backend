@@ -10,6 +10,7 @@ import {
     CreateChainSchema,
     AddChainMemberSchema,
     OnboardStaffSchema,
+    CheckInGuestSchema,
     ChainIdParamSchema,
     HotelIdParamSchema,
 } from "./validator/hospitality.validator.js";
@@ -127,6 +128,16 @@ hospitalityRoutes.get(
     requirePermissions(["VIEW_STAFF", "VIEW_HOTEL"], "any", true),
     validate(HotelIdParamSchema),
     hospitalityController.getHotelStaff
+);
+
+// ==================== Room Session (Check-in) Routes ====================
+
+// Frontdesk: Check in guest to a room
+hospitalityRoutes.post(
+    "/hotels/:hotelId/room-sessions/check-in",
+    requirePermissions(["CHECK_IN_GUEST", "VIEW_HOTEL"], "any", true),
+    validate(CheckInGuestSchema),
+    hospitalityController.checkInGuest
 );
 
 export default hospitalityRoutes;

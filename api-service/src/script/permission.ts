@@ -45,6 +45,8 @@ export const permissions = [
     { key: "VIEW_MANAGER", description: "View manager profiles" },
     { key: "UPDATE_MANAGER", description: "Update manager profiles" },
     { key: "DELETE_MANAGER", description: "Delete manager profiles" },
+    { key: "SERVICE_OPTIMIZATION", description: "Manage service optimization" },
+    { key: "CREATE_ATTACHMENT", description: "Create attachments" },
 
     { key: "VIEW_CHAIN_REPORTS", description: "View chain-level reports" },
     { key: "EXPORT_CHAIN_REPORTS", description: "Export chain-level reports" },
@@ -56,6 +58,8 @@ export const permissions = [
     { key: "VIEW_STAFF", description: "View hotel staff" },
     { key: "UPDATE_STAFF", description: "Update hotel staff" },
     { key: "DELETE_STAFF", description: "Delete hotel staff" },
+
+    { key: "CHECK_IN_GUEST", description: "Check in a guest" },
 
     { key: "ASSIGN_STAFF_ROLE", description: "Assign role to hotel staff" },
     { key: "BLOCK_STAFF", description: "Block a staff member" },
@@ -92,6 +96,11 @@ export const permissions = [
     { key: "CREATE_MENU", description: "Create menu" },
     { key: "UPDATE_MENU", description: "Update menu" },
     { key: "DELETE_MENU", description: "Delete menu" },
+
+    { key: "VIEW_SERVICE", description: "View services" },
+    { key: "CREATE_SERVICE", description: "Create service" },
+    { key: "UPDATE_SERVICE", description: "Update service" },
+    { key: "DELETE_SERVICE", description: "Delete service" },
 
     // ===== QR CODES =====
     { key: "VIEW_QR", description: "View QR sets and QR codes" },

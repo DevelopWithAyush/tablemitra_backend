@@ -26,10 +26,12 @@ const rolePermissionMap: Record<string, string[]> = {
         "VIEW_GLOBAL_REPORTS", "EXPORT_GLOBAL_REPORTS",
 
         "ONBOARD_MANAGER", "VIEW_MANAGER", "UPDATE_MANAGER", "DELETE_MANAGER",
+        "CREATE_ATTACHMENT",
         "VIEW_CHAIN_REPORTS", "EXPORT_CHAIN_REPORTS",
         "VIEW_HOTEL_REPORTS", "EXPORT_HOTEL_REPORTS",
 
         "CREATE_STAFF", "VIEW_STAFF", "UPDATE_STAFF", "DELETE_STAFF",
+        "CHECK_IN_GUEST",
         "ASSIGN_STAFF_ROLE", "BLOCK_STAFF", "UNBLOCK_STAFF",
 
         "CREATE_CUSTOMER_PROFILE", "VIEW_CUSTOMER_PROFILE", "UPDATE_CUSTOMER_PROFILE",
@@ -83,6 +85,7 @@ const rolePermissionMap: Record<string, string[]> = {
         "VIEW_STAFF",
         "UPDATE_STAFF",
         "DELETE_STAFF",
+        "CREATE_ATTACHMENT",
         "VIEW_CHAIN_REPORTS",
         "VIEW_HOTEL_REPORTS",
         "EXPORT_HOTEL_REPORTS"
@@ -104,7 +107,8 @@ const rolePermissionMap: Record<string, string[]> = {
         "VIEW_ORDER",
         "VIEW_QR",
         "CREATE_QR",
-        "UPDATE_QR"
+        "UPDATE_QR",
+        "CREATE_ATTACHMENT",
     ],
 
     FRONTDESK: [
@@ -119,11 +123,17 @@ const rolePermissionMap: Record<string, string[]> = {
         "VIEW_MENU",
         "CREATE_MENU",
         "UPDATE_MENU",
-        "DELETE_MENU"
-        ,
+        "DELETE_MENU",
+        "CREATE_ATTACHMENT",
         "VIEW_QR",
         "CREATE_QR",
-        "UPDATE_QR"
+        "UPDATE_QR",
+        "CHECK_IN_GUEST",
+        "SERVICE_OPTIMIZATION",
+        "VIEW_SERVICE",
+        "CREATE_SERVICE",
+        "UPDATE_SERVICE",
+        "DELETE_SERVICE",
     ],
 
     KITCHEN: [
@@ -133,21 +143,29 @@ const rolePermissionMap: Record<string, string[]> = {
         "VIEW_MENU",
         "CREATE_MENU",
         "UPDATE_MENU",
-        "DELETE_MENU"
+        "DELETE_MENU",
+        "CREATE_ATTACHMENT",
     ],
 
     ROOM_SERVICE: [
         "VIEW_ORDER",
         "ACCEPT_ORDER",
         "UPDATE_ORDER",
-        "VIEW_QR"
+        "VIEW_QR",
+        "SERVICE_OPTIMIZATION",
+        "CREATE_ATTACHMENT",
+        "VIEW_SERVICE",
+        "CREATE_SERVICE",
+        "UPDATE_SERVICE",
+        "DELETE_SERVICE",
     ],
 
     CUSTOMER: [
         "CREATE_CUSTOMER_PROFILE",
         "VIEW_CUSTOMER_PROFILE",
         "CREATE_ORDER",
-        "VIEW_ORDER"
+        "VIEW_ORDER",
+        "CREATE_ATTACHMENT",
     ]
 };
 

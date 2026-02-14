@@ -7,12 +7,14 @@ import ChainMembership from "./db/chain-membership.model.js";
 import Founder from "./db/founder.model.js";
 import Hotel from "./db/hotel.model.js";
 import HotelStaff from "./db/hotel-staff.model.js";
+import RoomSession from "./db/room_session.js";
 import {
     ServiceResult,
     OnboardChainResult,
     OnboardHotelResult,
     AddMemberResult,
     OnboardStaffResult,
+    CheckInGuestResult,
     ChainListItem,
     HotelListItem,
     StaffListItem,
@@ -713,6 +715,115 @@ class HospitalityService {
             ).catch((err) => logger.error("Audit publish failed:", err));
         }
         return result as ServiceResult<OnboardStaffResult>;
+    };
+
+    // ==================== Room Session (for QR / occupancy) ====================
+
+    /**
+     * Returns room numbers that have an active session (occupied).
+     * Used by qr-code module to enrich room list with roomStatus (OCCUPIED/VACANT).
+     */
+    getOccupiedRoomNumbers = async (hotelId: string): Promise<string[]> => {
+        const roomNumbers = await RoomSession.distinct("roomNumber", {
+            hotelId: new Types.ObjectId(hotelId),
+            status: "ACTIVE",
+        });
+        return roomNumbers;
+    };
+
+    /**
+     * Returns occupied rooms with their session stats (for QR room list).
+     * Used by qr-code module when type=ROOM to attach stats to OCCUPIED rooms.
+     */
+    getOccupiedRoomsWithStats = async (
+        hotelId: string
+    ): Promise<Array<{ roomNumber: string; stats: { totalOrders: number; totalFoodOrders: number; totalServiceRequests: number; totalSpend: number } }>> => {
+        const sessions = await RoomSession.find({
+            hotelId: new Types.ObjectId(hotelId),
+            status: "ACTIVE",
+        })
+            .select("roomNumber stats")
+            .lean();
+
+        return sessions.map((s) => ({
+            roomNumber: s.roomNumber,
+            stats: {
+                totalOrders: s.stats?.totalOrders ?? 0,
+                totalFoodOrders: s.stats?.totalFoodOrders ?? 0,
+                totalServiceRequests: s.stats?.totalServiceRequests ?? 0,
+                totalSpend: s.stats?.totalSpend ?? 0,
+            },
+        }));
+    };
+
+    /**
+     * Check in guest(s) to a room (frontdesk). Creates an active room session.
+     * Supports multiple guests; each guest can have optional name and/or phone.
+     */
+    checkInGuest = async (
+        hotelId: string,
+        data: { roomNumber: string; guests?: Array<{ name?: string; phone?: string }> },
+        checkedInByUserId: string,
+        auditContext?: HospitalityAuditContext
+    ): Promise<ServiceResult<CheckInGuestResult>> => {
+        const existingActive = await RoomSession.findOne({
+            hotelId: new Types.ObjectId(hotelId),
+            roomNumber: data.roomNumber.trim(),
+            status: "ACTIVE",
+        }).lean();
+
+        if (existingActive) {
+            return { success: false, message: "Room is already occupied" };
+        }
+
+        const roomExists = await qrCodeService.isValidRoomForHotel(hotelId, data.roomNumber.trim());
+        if (!roomExists) {
+            return { success: false, message: "Room does not exist for this hotel" };
+        }
+
+        const guests = (data.guests ?? []).map((g) => ({
+            name: g.name?.trim() || undefined,
+            phone: g.phone?.trim() || undefined,
+        }));
+
+        const [session] = await RoomSession.create([
+            {
+                hotelId: new Types.ObjectId(hotelId),
+                roomNumber: data.roomNumber.trim(),
+                status: "ACTIVE",
+                checkedInBy: new Types.ObjectId(checkedInByUserId),
+                metadata: {
+                    guests,
+                    guestCount: guests.length,
+                },
+            },
+        ]);
+
+        await qrCodeService.invalidateHotelQrCache(hotelId);
+
+        if (auditContext) {
+            publishAuditEvent(
+                "GUEST_CHECKED_IN",
+                "GUEST_SESSION",
+                session._id.toString(),
+                auditContext.actor,
+                {
+                    context: { ...auditContext.context, hotelId },
+                    newData: { roomNumber: session.roomNumber, guests },
+                }
+            ).catch((err) => logger.error("Audit publish failed:", err));
+        }
+
+        return {
+            success: true,
+            data: {
+                sessionId: session._id.toString(),
+                hotelId,
+                roomNumber: session.roomNumber,
+                checkInAt: session.checkInAt,
+                guests,
+            },
+        };
     };
 
     // ==================== List Methods ====================

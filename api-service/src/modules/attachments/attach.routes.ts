@@ -7,7 +7,7 @@ import {
     getAttachmentById,
 } from "./attach.controller.js";
 
-const attachmentRoutes = Router();
+const attachmentRoutes = Router({ mergeParams: true });
 
 attachmentRoutes.use(authMiddleware);
 

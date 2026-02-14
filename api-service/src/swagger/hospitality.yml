@@ -628,6 +628,64 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
 
+  # ==================== ROOM SESSION (CHECK-IN) ENDPOINTS ====================
+  /api/v1/{app}/hospitality/hotels/{hotelId}/room-sessions/check-in:
+    post:
+      tags:
+        - Hospitality - Room Sessions
+      summary: Check in guest(s) to a room
+      description: |
+        Frontdesk checks in one or more guests to a room. Creates an active room session.
+        - **roomNumber** is required (e.g. R-101, must match a room in the hotel's QR set).
+        - **guests** is an optional array; each entry can have optional **name** and/or **phone** (at least one per guest).
+        Requires CHECK_IN_GUEST (or VIEW_HOTEL) permission with hotel context.
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/AppParam"
+        - $ref: "#/components/parameters/HotelIdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CheckInGuestInput"
+      responses:
+        "201":
+          description: Guest checked in successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "Guest checked in successfully"
+                  data:
+                    $ref: "#/components/schemas/CheckInGuestResult"
+        "400":
+          description: Bad request - Room already occupied or validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Forbidden - Insufficient permissions or no hotel context
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
 # ==================== COMPONENTS ====================
 components:
   parameters:
@@ -1235,3 +1293,66 @@ components:
         isNewUser:
           type: boolean
           example: true
+
+    # ==================== ROOM SESSION (CHECK-IN) SCHEMAS ====================
+    GuestEntry:
+      type: object
+      description: One guest entry (at least name or phone)
+      properties:
+        name:
+          type: string
+          maxLength: 200
+          example: "John Doe"
+        phone:
+          type: string
+          maxLength: 20
+          example: "+919876543210"
+
+    CheckInGuestInput:
+      type: object
+      required:
+        - roomNumber
+      properties:
+        roomNumber:
+          type: string
+          minLength: 1
+          maxLength: 50
+          example: "R-101"
+          description: Room identifier (must exist in hotel's QR set)
+        guests:
+          type: array
+          description: Optional list of guests; each can have name and/or phone
+          default: []
+          items:
+            $ref: "#/components/schemas/GuestEntry"
+          example:
+            - name: "John Doe"
+              phone: "+919876543210"
+            - name: "Jane Doe"
+
+    CheckInGuestResult:
+      type: object
+      properties:
+        sessionId:
+          type: string
+          example: "507f1f77bcf86cd799439040"
+          description: Room session ID (MongoDB ObjectId)
+        hotelId:
+          type: string
+          example: "507f1f77bcf86cd799439020"
+        roomNumber:
+          type: string
+          example: "R-101"
+        checkInAt:
+          type: string
+          format: date-time
+          description: Check-in timestamp
+        guests:
+          type: array
+          description: List of guests checked in
+          items:
+            $ref: "#/components/schemas/GuestEntry"
+          example:
+            - name: "John Doe"
+              phone: "+919876543210"
+            - name: "Jane Doe"

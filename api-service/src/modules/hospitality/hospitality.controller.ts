@@ -430,6 +430,38 @@ class HospitalityController {
             data: result,
         });
     });
+
+    // ==================== Room Session (Check-in) APIs ====================
+
+    /**
+     * Check in guest(s) to a room (frontdesk). Supports multiple guests; name and phone are optional per guest.
+     * POST /api/:app/hospitality/hotels/:hotelId/room-sessions/check-in
+     */
+    checkInGuest = asyncHandler(async (req: Request, res: Response) => {
+        const user = (req as any).user as IJwtPayload;
+        const hotelId = req.params.hotelId as string;
+        const { roomNumber, guests } = req.body;
+
+        const result = await hospitalityService.checkInGuest(
+            hotelId,
+            { roomNumber, guests },
+            user.sub,
+            getAuditContext(req)
+        );
+
+        if (!result.success) {
+            return res.status(400).json({
+                success: false,
+                message: result.message,
+            });
+        }
+
+        return res.status(201).json({
+            success: true,
+            message: "Guest checked in successfully",
+            data: result.data,
+        });
+    });
 }
 
 export default new HospitalityController();

@@ -75,11 +75,17 @@ export const UpdateServiceSchema = z.object({
 
 // ==================== PAGINATION SCHEMA ====================
 
+// Query params are strings; "false" must map to boolean false (z.coerce.boolean() treats "false" as true)
+const isActiveQuerySchema = z
+    .union([z.literal("true"), z.literal("false"), z.boolean()])
+    .optional()
+    .transform((val) => (val === undefined ? undefined : val === true || val === "true"));
+
 export const PaginationSchema = z.object({
     page: z.coerce.number().int().min(1).default(1),
     limit: z.coerce.number().int().min(1).max(100).default(20),
     search: z.string().optional(),
-    isActive: z.coerce.boolean().optional(),
+    isActive: isActiveQuerySchema,
 });
 
 // ==================== ROUTE VALIDATION SCHEMAS ====================

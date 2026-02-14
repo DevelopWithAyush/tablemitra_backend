@@ -11,15 +11,20 @@ import {
     IAddSingleQrCodeInput,
     IToggleQrStatusInput,
     IQrCodeInfo,
+    IQrCodeInfoWithRoomStatus,
+    IFloorWithRooms,
     QrCodeAuditContext,
 } from "./qr-code.types.js";
 import { publishAuditEvent } from "../audit/audit.publisher.js";
+import logger from "../../helpers/logger/index.js";
 
 class QrCodeService {
     private readonly CACHE_TTL_SECONDS = 60 * 10; // 10 minutes
+    private readonly CACHE_TTL_GROUPED_SECONDS = 60; // 1 minute for grouped (roomStatus freshness)
     private readonly cacheKey = {
         qrSet: (hotelId: string) => `qr:${hotelId}:set`,
         qrCodes: (hotelId: string, type: string, status?: string) => `qr:${hotelId}:codes:${type}:${status ?? "ALL"}`,
+        qrCodesGrouped: (hotelId: string, type: string, status?: string) => `qr:${hotelId}:grouped:${type}:${status ?? "ALL"}`,
         locations: (hotelId: string, type: string) => `qr:${hotelId}:locations:${type}`,
         scan: (code: string) => `qr:scan:${code}`,
     };
@@ -33,6 +38,41 @@ class QrCodeService {
             cursor = String(res.cursor);
             if (res.keys.length) await redis.del(res.keys);
         } while (cursor !== "0");
+    }
+
+    /**
+     * Invalidate all QR cache for a hotel (e.g. after check-in/check-out so room list + roomStatus/stats are fresh).
+     * Public so hospitality (and others) can call when room session state changes.
+     */
+    async invalidateHotelQrCache(hotelId: string): Promise<void> {
+        await this.invalidateHotelCache(hotelId);
+    }
+
+    /**
+     * Returns whether the given room number exists for the hotel (ROOM-type QR code, isActive).
+     * Tries grouped ROOM cache first; on cache miss, checks DB.
+     */
+    async isValidRoomForHotel(hotelId: string, roomNumber: string): Promise<boolean> {
+        const trimmed = roomNumber.trim();
+        const redis = getRedis();
+        const cacheKey = this.cacheKey.qrCodesGrouped(hotelId, "ROOM", undefined);
+        const cached = await redis.get(cacheKey);
+        if (cached) {
+            const data: IFloorWithRooms[] = JSON.parse(cached);
+            for (const group of data) {
+                if (group.rooms.some((r) => r.roomNumber === trimmed)) return true;
+            }
+            return false;
+        }
+        const set = await QrSet.findOne({ hotelId: new Types.ObjectId(hotelId) }).select("_id").lean();
+        if (!set) return false;
+        const exists = await QrCode.exists({
+            qrSetId: set._id,
+            type: "ROOM",
+            roomNumber: trimmed,
+            isActive: true,
+        });
+        return !!exists;
     }
 
     private async invalidateScanCacheByCode(code: string): Promise<void> {
@@ -389,22 +429,23 @@ class QrCodeService {
     }
 
     /**
-     * Get QR Codes (Filtered)
+     * Get QR Codes (Filtered) – grouped by floor (ROOM) or zone (RESTAURANT/BAR).
+     * For ROOM type, each room includes roomStatus: OCCUPIED | VACANT from active room sessions.
      */
     async getQrCodes(
         hotelId: string,
         type: "ROOM" | "RESTAURANT" | "BAR",
         status?: "ACTIVE" | "INACTIVE"
-    ): Promise<ServiceResult<IQrCodeInfo[]>> {
+    ): Promise<ServiceResult<IFloorWithRooms[]>> {
         try {
             const redis = getRedis();
-            const cacheKey = this.cacheKey.qrCodes(hotelId, type, status);
-            const cached = await redis.get(cacheKey);
+            const cacheKeyGrouped = this.cacheKey.qrCodesGrouped(hotelId, type, status);
+            const cached = await redis.get(cacheKeyGrouped);
             if (cached) {
                 return { success: true, message: "QR Codes fetched", data: JSON.parse(cached) };
             }
 
-            const match: any = { type, isActive: true }; // Only show non-deleted codes
+            const match: any = { type, isActive: true };
             if (status) match.status = status;
 
             const rows = await QrSet.aggregate([
@@ -439,13 +480,41 @@ class QrCodeService {
             ]);
 
             if (!rows.length) return { success: false, message: "QR Set not found" };
-            const data = (rows[0]?.codes ?? []).map((doc: any) => this.mapToInfo(doc));
-            await redis.setEx(cacheKey, this.CACHE_TTL_SECONDS, JSON.stringify(data));
+            const codes = (rows[0]?.codes ?? []).map((doc: any) => this.mapToInfo(doc)) as IQrCodeInfo[];
+
+            const groupByField = type === "ROOM" ? "floor" : "zone";
+            const occupiedRoomsStatsMap = new Map<string, { totalOrders: number; totalFoodOrders: number; totalServiceRequests: number; totalSpend: number }>();
+            if (type === "ROOM") {
+                const hospitalityService = (await import("../hospitality/hospitality.service.js")).default;
+                const occupiedWithStats = await hospitalityService.getOccupiedRoomsWithStats(hotelId);
+                for (const { roomNumber, stats } of occupiedWithStats) {
+                    occupiedRoomsStatsMap.set(roomNumber, stats);
+                }
+            }
+
+            const groupMap = new Map<string, IQrCodeInfoWithRoomStatus[]>();
+            for (const code of codes) {
+                const groupKey = (code[groupByField as keyof IQrCodeInfo] as string) ?? "";
+                const room: IQrCodeInfoWithRoomStatus = { ...code };
+                if (type === "ROOM" && code.roomNumber != null) {
+                    const stats = occupiedRoomsStatsMap.get(code.roomNumber);
+                    room.roomStatus = stats != null ? "OCCUPIED" : "VACANT";
+                    if (stats != null) room.stats = stats;
+                }
+                if (!groupMap.has(groupKey)) groupMap.set(groupKey, []);
+                groupMap.get(groupKey)!.push(room);
+            }
+
+            const data: IFloorWithRooms[] = Array.from(groupMap.entries())
+                .sort(([a], [b]) => a.localeCompare(b))
+                .map(([floor, rooms]) => ({ floor, rooms }));
+
+            await redis.setEx(cacheKeyGrouped, this.CACHE_TTL_GROUPED_SECONDS, JSON.stringify(data));
 
             return {
                 success: true,
                 message: "QR Codes fetched",
-                data
+                data,
             };
         } catch (error: any) {
             return { success: false, message: error.message || "Failed to fetch QR codes" };

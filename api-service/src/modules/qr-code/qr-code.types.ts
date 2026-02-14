@@ -103,6 +103,27 @@ export interface IQrCodeInfo {
     createdAt: Date;
 }
 
+/** Room session stats (only when room is OCCUPIED). */
+export interface IRoomSessionStats {
+    totalOrders: number;
+    totalFoodOrders: number;
+    totalServiceRequests: number;
+    totalSpend: number;
+}
+
+/** Room item with occupancy status and optional session stats (only for type ROOM). */
+export interface IQrCodeInfoWithRoomStatus extends IQrCodeInfo {
+    roomStatus?: "OCCUPIED" | "VACANT";
+    /** Present when roomStatus is OCCUPIED. */
+    stats?: IRoomSessionStats;
+}
+
+/** One group (by floor or zone) with its rooms/tables. Same shape for ROOM (floor) and RESTAURANT/BAR (zone as floor). */
+export interface IFloorWithRooms {
+    floor: string;
+    rooms: IQrCodeInfoWithRoomStatus[];
+}
+
 export interface IDeactivateQrInput {
     reason: string;
     deactivatedBy: string;

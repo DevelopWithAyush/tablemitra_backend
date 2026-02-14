@@ -174,6 +174,23 @@ export const OnboardStaffSchema = z.object({
     }),
 });
 
+// ==================== Room Session (Check-in) Schemas ====================
+
+const GuestEntrySchema = z.object({
+    name: z.string().max(200).optional(),
+    phone: z.string().max(20).optional(),
+});
+
+export const CheckInGuestSchema = z.object({
+    params: z.object({
+        hotelId: MongoIdSchema,
+    }),
+    body: z.object({
+        roomNumber: z.string().min(1, "Room number is required").max(50),
+        guests: z.array(GuestEntrySchema).optional().default([]),
+    }),
+});
+
 // ==================== Param Schemas ====================
 
 export const ChainIdParamSchema = z.object({

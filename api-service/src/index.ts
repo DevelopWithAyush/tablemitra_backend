@@ -30,8 +30,8 @@ initAWS();
 startAttachmentCleanupJob();
 
 app.use(cors({
-    origin: ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:3002', 'http://localhost:3004', 'https://admin.tablemitra.com', 'https://tablemitra.com'],
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    origin: ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:3002', 'http://localhost:3003', 'http://localhost:3004', 'https://admin.tablemitra.com', 'https://tablemitra.com'],
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
     credentials: true,
 }));
@@ -52,7 +52,7 @@ app.get("/health", (req: Request, res: Response) => {
     });
 });
 
-app.use("/api/v1/:app" , appValidator, router);
+app.use("/api/v1/:app", appValidator, router);
 
 app.use(errorMiddleware);
 app.listen(process.env.PORT, () => {
