@@ -7,6 +7,7 @@ import {
     CreateItemSchema,
     UpdateItemSchema,
     PaginationSchema,
+    GetFullMenuValidation,
 } from "./validator/menu.validator.js";
 import { IJwtPayload } from "../auth/auth.types.js";
 import type { MenuAuditContext } from "./menu.types.js";
@@ -84,6 +85,31 @@ export const createCategory = asyncHandler(async (req: Request, res: Response) =
     return res.status(201).json({
         success: true,
         message: "Category created successfully",
+        data: result.data,
+    });
+});
+
+/**
+ * Update a category
+ * PUT /categories/:categoryId
+ */
+export const updateCategory = asyncHandler(async (req: Request, res: Response) => {
+    const hotelId = getHotelIdFromContext(req);
+    const categoryId = req.params.categoryId as string;
+    const dto = UpdateCategorySchema.parse(req.body);
+
+    const result = await menuService.updateCategory(hotelId, categoryId, dto, getAuditContext(req));
+
+    if (!result.success) {
+        return res.status(400).json({
+            success: false,
+            message: result.message,
+        });
+    }
+
+    return res.json({
+        success: true,
+        message: "Category updated successfully",
         data: result.data,
     });
 });
@@ -240,14 +266,14 @@ export const getVariants = asyncHandler(async (req: Request, res: Response) => {
 // ==================== FULL MENU CONTROLLERS ====================
 
 /**
- * Get full menu with nested structure
- * GET /menu-items
+ * Get full menu with nested structure (super-search).
+ * GET /menu-items?search=...&categoryIds=...&minPrice=...&maxPrice=...&type=...&isPopular=...&activeOnly=...
  */
 export const getFullMenu = asyncHandler(async (req: Request, res: Response) => {
     const hotelId = getHotelIdFromContext(req);
-    const includeInactive = req.query.includeInactive === "true";
+    const parsed = GetFullMenuValidation.parse({ query: req.query });
 
-    const result = await menuService.getFullMenu(hotelId, includeInactive);
+    const result = await menuService.getFullMenu(hotelId, parsed.query);
 
     if (!result.success) {
         return res.status(500).json({

@@ -109,6 +109,59 @@ paths:
               schema:
                 $ref: "#/components/schemas/MenuError"
 
+  /api/v1/{app}/menu/categories/{categoryId}:
+    put:
+      tags:
+        - Menu - Categories
+      summary: Update a category
+      description: Update an existing menu category. All body fields are optional; only provided fields are updated.
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/AppParam"
+        - $ref: "#/components/parameters/CategoryIdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateCategoryInput"
+      responses:
+        "200":
+          description: Category updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "Category updated successfully"
+                  data:
+                    $ref: "#/components/schemas/Category"
+        "400":
+          description: Bad request - Category not found or name already exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MenuError"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MenuError"
+        "403":
+          description: Forbidden - requires UPDATE_MENU
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MenuError"
+
   /api/v1/{app}/menu/categories/{categoryId}/toggle:
     put:
       tags:
@@ -425,19 +478,70 @@ paths:
     get:
       tags:
         - Menu - Full Menu
-      summary: Get full menu
-      description: Get complete menu with nested categories, items, and variants
+      summary: Get full menu (super-search)
+      description: |
+        Get complete menu with nested categories, items, and variants.
+        Supports filtering by search text, category IDs, price range, item type, popularity, and active-only.
+        Use this single API for user-facing menu with search and filters.
       security:
         - BearerAuth: []
         - CookieAuth: []
       parameters:
         - $ref: "#/components/parameters/AppParam"
-        - name: includeInactive
+        - name: search
           in: query
+          required: false
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 200
+          description: Search in category name/description, item name/description/shortCode, variant name
+        - name: categoryIds
+          in: query
+          required: false
+          schema:
+            oneOf:
+              - type: string
+                description: Comma-separated category IDs
+              - type: array
+                items:
+                  type: string
+                  pattern: '^[0-9a-fA-F]{24}$'
+          description: Filter by category IDs (comma-separated or array)
+        - name: minPrice
+          in: query
+          required: false
+          schema:
+            type: number
+            minimum: 0
+          description: Minimum price (item or variant range)
+        - name: maxPrice
+          in: query
+          required: false
+          schema:
+            type: number
+            minimum: 0
+          description: Maximum price (item or variant range)
+        - name: type
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [veg, non-veg, egg]
+          description: Filter by item type
+        - name: isPopular
+          in: query
+          required: false
           schema:
             type: boolean
-            default: false
-          description: Include inactive items and categories
+          description: Filter by popular items only (true/false)
+        - name: activeOnly
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: true
+          description: When true (default), only active categories and items are returned; when false, inactive are included
       responses:
         "200":
           description: Full menu data
@@ -606,6 +710,38 @@ components:
           default: 0
         availability:
           $ref: "#/components/schemas/Availability"
+        suggestedCategoryIds:
+          type: array
+          items:
+            type: string
+            pattern: '^[0-9a-fA-F]{24}$'
+
+    UpdateCategoryInput:
+      type: object
+      description: All fields optional; only provided fields are updated
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+          example: "Starters"
+        description:
+          type: string
+          maxLength: 500
+          nullable: true
+        image:
+          type: string
+          pattern: '^[0-9a-fA-F]{24}$'
+          nullable: true
+          description: Attachment ID
+        sortOrder:
+          type: integer
+          minimum: 0
+        isActive:
+          type: boolean
+        availability:
+          $ref: "#/components/schemas/Availability"
+          nullable: true
         suggestedCategoryIds:
           type: array
           items:

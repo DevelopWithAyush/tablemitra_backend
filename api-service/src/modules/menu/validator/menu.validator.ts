@@ -193,10 +193,32 @@ export const GetVariantsValidation = z.object({
     params: ItemIdParam.passthrough(),
 });
 
-// Full menu
+// Full menu – super search (search, categoryIds, price range, type, isPopular, activeOnly)
+const optionalBooleanQuery = z
+    .union([z.literal("true"), z.literal("false"), z.boolean()])
+    .optional()
+    .transform((val) => (val === undefined ? undefined : val === true || val === "true"));
+
 export const GetFullMenuValidation = z.object({
     query: z.object({
-        includeInactive: z.coerce.boolean().default(false),
+        search: z.string().min(1).max(200).optional(),
+        categoryIds: z
+            .union([z.string(), z.array(z.string())])
+            .optional()
+            .transform((val): string[] | undefined => {
+                if (val === undefined) return undefined;
+                const arr = Array.isArray(val) ? val : val.split(",").map((s) => s.trim()).filter(Boolean);
+                return arr.length ? arr : undefined;
+            })
+            .refine((arr) => !arr || arr.every((id) => mongoIdRegex.test(id)), "Invalid category ID format"),
+        minPrice: z.coerce.number().min(0).optional(),
+        maxPrice: z.coerce.number().min(0).optional(),
+        type: z.enum(["veg", "non-veg", "egg"]).optional(),
+        isPopular: optionalBooleanQuery,
+        activeOnly: optionalBooleanQuery.default(true),
+    }).refine((data) => data.minPrice === undefined || data.maxPrice === undefined || data.minPrice <= data.maxPrice, {
+        message: "minPrice must be less than or equal to maxPrice",
+        path: ["maxPrice"],
     }),
 });
 

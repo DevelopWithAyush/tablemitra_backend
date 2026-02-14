@@ -5,6 +5,7 @@ import { validate } from "../../middleware/validate.middleware.js";
 import {
     GetCategoriesValidation,
     CreateCategoryValidation,
+    UpdateCategoryValidation,
     ToggleCategoryValidation,
     GetItemsValidation,
     CreateItemValidation,
@@ -16,6 +17,7 @@ import {
 import {
     getCategories,
     createCategory,
+    updateCategory,
     toggleCategory,
     getItems,
     createItem,
@@ -47,6 +49,14 @@ menuRoutes.post(
     requirePermissions("CREATE_MENU"),
     validate(CreateCategoryValidation),
     createCategory
+);
+
+// Update a category
+menuRoutes.put(
+    "/categories/:categoryId",
+    requirePermissions("UPDATE_MENU"),
+    validate(UpdateCategoryValidation),
+    updateCategory
 );
 
 // Toggle category active status

@@ -18,6 +18,7 @@ import {
     IItemWithVariants,
     ICategoryWithItems,
     IFullMenu,
+    GetFullMenuOptions,
     VariantPriceRange,
     MenuAuditContext,
 } from "./menu.types.js";
@@ -818,22 +819,43 @@ class MenuService {
     // ==================== FULL MENU ====================
 
     /**
-     * Get full menu with nested categories, items, and variants
+     * Get full menu with nested categories, items, and variants.
+     * Supports super-search: search text, categoryIds, minPrice, maxPrice, type, isPopular, activeOnly.
      */
     getFullMenu = async (
         hotelId: string,
-        includeInactive = false
+        options: GetFullMenuOptions = {}
     ): Promise<ServiceResult<IFullMenu>> => {
+        const {
+            search,
+            categoryIds,
+            minPrice,
+            maxPrice,
+            type,
+            isPopular,
+            activeOnly = true,
+        } = options;
+        const includeInactive = activeOnly === false;
+
+        const hasFilters = Boolean(
+            search?.trim() ||
+            (categoryIds?.length ?? 0) > 0 ||
+            minPrice != null ||
+            maxPrice != null ||
+            type ||
+            isPopular !== undefined
+        );
+
         const redis = getRedis();
         const cacheKey = `${CACHE_KEYS.FULL_MENU(hotelId)}:${includeInactive}`;
 
-        // Check cache
-        const cached = await redis.get(cacheKey);
-        if (cached) {
-            return { success: true, data: JSON.parse(cached) };
+        if (!hasFilters) {
+            const cached = await redis.get(cacheKey);
+            if (cached) {
+                return { success: true, data: JSON.parse(cached) };
+            }
         }
 
-        // Build category filter
         const categoryFilter: Record<string, unknown> = {
             hotelId: new Types.ObjectId(hotelId),
         };
@@ -841,13 +863,11 @@ class MenuService {
             categoryFilter.isActive = true;
         }
 
-        // Get all categories
         const categories = await CategoryModel.find(categoryFilter)
             .populate("image", "url type")
             .sort({ sortOrder: 1 })
             .lean();
 
-        // Build item filter
         const itemFilter: Record<string, unknown> = {
             hotelId: new Types.ObjectId(hotelId),
         };
@@ -855,13 +875,11 @@ class MenuService {
             itemFilter.isActive = true;
         }
 
-        // Get all items
         const items = await ItemModel.find(itemFilter)
             .populate("image", "url type")
             .sort({ sortOrder: 1 })
             .lean();
 
-        // Get all variants for items with variants
         const itemsWithVariants = items.filter((item) => item.hasVariants);
         const itemIds = itemsWithVariants.map((item) => item._id);
 
@@ -873,7 +891,6 @@ class MenuService {
             .sort({ sortOrder: 1 })
             .lean();
 
-        // Create variant map for quick lookup
         const variantMap = new Map<string, IVariant[]>();
         for (const variant of variants) {
             const itemIdStr = variant.itemId.toString();
@@ -883,7 +900,6 @@ class MenuService {
             variantMap.get(itemIdStr)!.push(variant as unknown as IVariant);
         }
 
-        // Create item map for quick lookup by category
         const itemMap = new Map<string, IItemWithVariants[]>();
         for (const item of items) {
             const categoryIdStr = item.categoryId.toString();
@@ -897,21 +913,63 @@ class MenuService {
             itemMap.get(categoryIdStr)!.push(itemWithVariants);
         }
 
-        // Build nested response
-        const categoriesWithItems: ICategoryWithItems[] = categories.map((category) => ({
+        let categoriesWithItems: ICategoryWithItems[] = categories.map((category) => ({
             ...(category as unknown as ICategoryWithItems),
             items: itemMap.get(category._id.toString()) || [],
         }));
 
+        if (categoryIds?.length) {
+            const idSet = new Set(categoryIds);
+            categoriesWithItems = categoriesWithItems.filter((c) => idSet.has(c._id.toString()));
+        }
+
+        const searchLower = search?.trim().toLowerCase();
+        categoriesWithItems = categoriesWithItems.map((category) => {
+            let list = category.items.filter((item) => {
+                if (minPrice != null || maxPrice != null) {
+                    const low = item.hasVariants
+                        ? (item.minVariantPrice ?? 0)
+                        : (item.price ?? 0);
+                    const high = item.hasVariants
+                        ? (item.maxVariantPrice ?? 0)
+                        : (item.price ?? 0);
+                    if (minPrice != null && high < minPrice) return false;
+                    if (maxPrice != null && low > maxPrice) return false;
+                }
+                if (type && item.type !== type) return false;
+                if (isPopular !== undefined && item.isPopular !== isPopular) return false;
+                if (searchLower) {
+                    const categoryMatch = [category.name, category.description].some(
+                        (t) => t && t.toLowerCase().includes(searchLower)
+                    );
+                    const itemMatch = [item.name, item.description, item.shortCode].some(
+                        (t) => t && String(t).toLowerCase().includes(searchLower)
+                    );
+                    const variantMatch = item.variants.some(
+                        (v) =>
+                            v.name.toLowerCase().includes(searchLower) ||
+                            (v.shortCode && v.shortCode.toLowerCase().includes(searchLower))
+                    );
+                    if (!categoryMatch && !itemMatch && !variantMatch) return false;
+                }
+                return true;
+            });
+            return { ...category, items: list };
+        });
+
+        categoriesWithItems = categoriesWithItems.filter((c) => c.items.length > 0);
+        const totalItems = categoriesWithItems.reduce((sum, c) => sum + c.items.length, 0);
+
         const result: IFullMenu = {
             hotelId,
             categories: categoriesWithItems,
-            totalCategories: categories.length,
-            totalItems: items.length,
+            totalCategories: categoriesWithItems.length,
+            totalItems,
         };
 
-        // Cache result
-        await redis.setEx(cacheKey, CACHE_TTL, JSON.stringify(result));
+        if (!hasFilters) {
+            await redis.setEx(cacheKey, CACHE_TTL, JSON.stringify(result));
+        }
 
         return { success: true, data: result };
     };

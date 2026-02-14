@@ -95,6 +95,19 @@ export interface ICategoryWithItems extends Omit<ICategory, "image"> {
     items: IItemWithVariants[];
 }
 
+// ==================== FULL MENU QUERY OPTIONS ====================
+
+export interface GetFullMenuOptions {
+    search?: string;
+    categoryIds?: string[];
+    minPrice?: number;
+    maxPrice?: number;
+    type?: "veg" | "non-veg" | "egg";
+    isPopular?: boolean;
+    /** When true (default), only active categories/items are returned. When false, inactive are included. */
+    activeOnly?: boolean;
+}
+
 // ==================== FULL MENU RESPONSE ====================
 
 export interface IFullMenu {
