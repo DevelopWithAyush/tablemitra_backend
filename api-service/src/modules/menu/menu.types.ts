@@ -74,6 +74,26 @@ export interface IItemWithVariants extends Omit<IItem, "image"> {
     variants: IVariant[];
 }
 
+/** Minimal item info for suggested-items list (e.g. on edit page) */
+export interface ISuggestedItemSummary {
+    _id: Types.ObjectId;
+    name: string;
+    shortCode: string;
+    type: "veg" | "non-veg" | "egg";
+    categoryId: Types.ObjectId;
+    isActive: boolean;
+    price?: number;
+    hasVariants?: boolean;
+    minVariantPrice?: number;
+    maxVariantPrice?: number;
+}
+
+/** Full item detail for edit page: item + variants + populated suggestions + category */
+export interface IItemDetail extends IItemWithVariants {
+    suggestedItems: ISuggestedItemSummary[];
+    category: { _id: Types.ObjectId; name: string };
+}
+
 // ==================== CATEGORY ====================
 
 export interface ICategory {

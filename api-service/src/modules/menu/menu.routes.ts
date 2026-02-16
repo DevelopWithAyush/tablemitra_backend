@@ -11,6 +11,7 @@ import {
     CreateItemValidation,
     UpdateItemValidation,
     ToggleItemValidation,
+    GetItemByIdValidation,
     GetVariantsValidation,
     GetFullMenuValidation,
 } from "./validator/menu.validator.js";
@@ -23,6 +24,7 @@ import {
     createItem,
     updateItem,
     toggleItem,
+    getItemDetail,
     getVariants,
     getFullMenu,
 } from "./menu.controller.js";
@@ -99,6 +101,14 @@ menuRoutes.put(
     requirePermissions("UPDATE_MENU"),
     validate(ToggleItemValidation),
     toggleItem
+);
+
+// Get item by ID (full detail for edit page – variants, suggestions, category)
+menuRoutes.get(
+    "/items/:itemId",
+    requirePermissions("VIEW_MENU"),
+    validate(GetItemByIdValidation),
+    getItemDetail
 );
 
 // ==================== VARIANT ROUTES ====================

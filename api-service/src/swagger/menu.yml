@@ -336,6 +336,46 @@ paths:
                 $ref: "#/components/schemas/MenuError"
 
   /api/v1/{app}/menu/items/{itemId}:
+    get:
+      tags:
+        - Menu - Items
+      summary: Get item by ID (full detail for edit page)
+      description: |
+        Returns full detail of a single menu item for the edit page, including
+        the item (with populated image), all variants, suggested items (populated with
+        name, shortCode, type, categoryId, pricing), and the parent category (id, name).
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/AppParam"
+        - $ref: "#/components/parameters/ItemIdParam"
+      responses:
+        "200":
+          description: Item detail with variants, suggested items, and category
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: "#/components/schemas/ItemDetail"
+        "404":
+          description: Item not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MenuError"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MenuError"
+
     put:
       tags:
         - Menu - Items
@@ -896,6 +936,59 @@ components:
               type: array
               items:
                 $ref: "#/components/schemas/Variant"
+
+    SuggestedItemSummary:
+      type: object
+      description: Minimal item info for suggested-items list (e.g. on edit page)
+      properties:
+        _id:
+          type: string
+          example: "507f1f77bcf86cd799439011"
+        name:
+          type: string
+        shortCode:
+          type: string
+        type:
+          type: string
+          enum: [veg, non-veg, egg]
+        categoryId:
+          type: string
+        isActive:
+          type: boolean
+        price:
+          type: number
+          nullable: true
+        hasVariants:
+          type: boolean
+          nullable: true
+        minVariantPrice:
+          type: number
+          nullable: true
+        maxVariantPrice:
+          type: number
+          nullable: true
+
+    ItemDetail:
+      allOf:
+        - $ref: "#/components/schemas/ItemWithVariants"
+        - type: object
+          description: Full item detail for edit page (variants + suggested items + category)
+          properties:
+            suggestedItems:
+              type: array
+              items:
+                $ref: "#/components/schemas/SuggestedItemSummary"
+              description: Populated suggested items (upsell)
+            category:
+              type: object
+              properties:
+                _id:
+                  type: string
+                  example: "507f1f77bcf86cd799439011"
+                name:
+                  type: string
+                  example: "Starters"
+              description: Parent category (id and name)
 
     CreateItemInput:
       type: object

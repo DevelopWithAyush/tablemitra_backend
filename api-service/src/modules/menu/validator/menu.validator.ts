@@ -193,6 +193,11 @@ export const GetVariantsValidation = z.object({
     params: ItemIdParam.passthrough(),
 });
 
+// Get single item by ID (full detail for edit page)
+export const GetItemByIdValidation = z.object({
+    params: ItemIdParam.passthrough(),
+});
+
 // Full menu – super search (search, categoryIds, price range, type, isPopular, activeOnly)
 const optionalBooleanQuery = z
     .union([z.literal("true"), z.literal("false"), z.boolean()])

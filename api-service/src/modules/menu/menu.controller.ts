@@ -241,6 +241,29 @@ export const toggleItem = asyncHandler(async (req: Request, res: Response) => {
 // ==================== VARIANT CONTROLLERS ====================
 
 /**
+ * Get item by ID with full detail (variants, suggested items, category) for edit page
+ * GET /items/:itemId
+ */
+export const getItemDetail = asyncHandler(async (req: Request, res: Response) => {
+    const hotelId = getHotelIdFromContext(req);
+    const itemId = req.params.itemId as string;
+
+    const result = await menuService.getItemDetail(hotelId, itemId);
+
+    if (!result.success) {
+        return res.status(404).json({
+            success: false,
+            message: result.message,
+        });
+    }
+
+    return res.json({
+        success: true,
+        data: result.data,
+    });
+});
+
+/**
  * Get variants for an item
  * GET /items/:itemId/variants
  */

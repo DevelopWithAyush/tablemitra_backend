@@ -16,6 +16,8 @@ import {
     IItem,
     IVariant,
     IItemWithVariants,
+    IItemDetail,
+    ISuggestedItemSummary,
     ICategoryWithItems,
     IFullMenu,
     GetFullMenuOptions,
@@ -478,6 +480,66 @@ class MenuService {
 
         await redis.setEx(cacheKey, CACHE_TTL, JSON.stringify(result));
         return result;
+    };
+
+    /**
+     * Get item by ID with full detail for edit page: item, variants, suggested items (populated), category.
+     */
+    getItemDetail = async (
+        hotelId: string,
+        itemId: string
+    ): Promise<ServiceResult<IItemDetail>> => {
+        const item = await ItemModel.findOne({
+            _id: new Types.ObjectId(itemId),
+            hotelId: new Types.ObjectId(hotelId),
+        })
+            .populate("image", "url type")
+            .lean();
+
+        if (!item) {
+            return { success: false, message: "Item not found" };
+        }
+
+        let variants: IVariant[] = [];
+        if (item.hasVariants) {
+            variants = (await VariantModel.find({
+                itemId: new Types.ObjectId(itemId),
+                hotelId: new Types.ObjectId(hotelId),
+            })
+                .sort({ sortOrder: 1 })
+                .lean()) as unknown as IVariant[];
+        }
+
+        const category = await CategoryModel.findOne(
+            { _id: item.categoryId, hotelId: new Types.ObjectId(hotelId) },
+            "name"
+        )
+            .lean();
+
+        let suggestedItems: ISuggestedItemSummary[] = [];
+        const suggestedIds = item.suggestedItemIds?.length
+            ? item.suggestedItemIds
+            : [];
+        if (suggestedIds.length > 0) {
+            const suggested = await ItemModel.find({
+                _id: { $in: suggestedIds },
+                hotelId: new Types.ObjectId(hotelId),
+            })
+                .select("name shortCode type categoryId isActive price hasVariants minVariantPrice maxVariantPrice")
+                .lean();
+            suggestedItems = suggested as unknown as ISuggestedItemSummary[];
+        }
+
+        const data: IItemDetail = {
+            ...(item as unknown as IItemWithVariants),
+            variants,
+            suggestedItems,
+            category: category
+                ? { _id: category._id as Types.ObjectId, name: category.name }
+                : { _id: item.categoryId as Types.ObjectId, name: "" },
+        };
+
+        return { success: true, data };
     };
 
     /**
