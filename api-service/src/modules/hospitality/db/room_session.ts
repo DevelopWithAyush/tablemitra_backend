@@ -43,6 +43,7 @@ const roomSessionSchema = new mongoose.Schema({
         guests: [{
             name: { type: String },
             phone: { type: String },
+            userId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
         }],
         guestCount: { type: Number, default: 0 },
         notes: { type: String },

@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import { asyncHandler } from "../../utils/async-handler.js";
+import hospitalityService from "../hospitality/hospitality.service.js";
 import { qrCodeService } from "./qr-code.service.js";
 import { DeleteQrCodeParams, DeleteQrCodeBody } from "./qr-code.types.js";
 import type {
@@ -9,7 +10,8 @@ import type {
     IToggleQrStatusInput,
     GetQrCodesQuery,
     ScanQrCodeParams,
-    GetLocationsQuery
+    GetLocationsQuery,
+    DownloadQrCodesQuery,
 } from "./qr-code.types.js";
 import type { QrCodeAuditContext } from "./qr-code.types.js";
 import type { ActorRole } from "../audit/audit.types.js";
@@ -206,6 +208,62 @@ class QrCodeController {
             message: result.message,
             data: { locations: result.data }
         });
+    });
+
+    /**
+     * Download QR codes as PDF
+     * GET /qr-codes/hotels/:hotelId/download?type=ROOM|RESTAURANT|BAR&floor=&roomNumber=&zone=&tableNumber=
+     * Fetches hotel (name, logo) via hospitality service (DDD). Filename includes hotel name and query.
+     */
+    downloadQrCodesPdf = asyncHandler(async (req: Request, res: Response) => {
+        const { hotelId } = req.params as unknown as HotelIdParams;
+        const query = req.query as unknown as DownloadQrCodesQuery;
+
+        const hotelResult = await hospitalityService.getHotelById(hotelId);
+        if (!hotelResult.success || !hotelResult.data) {
+            return res.status(404).json({
+                success: false,
+                message: hotelResult.message ?? "Hotel not found",
+            });
+        }
+
+        const hotelData = hotelResult.data as { name?: string; logo?: { url?: string } | string };
+        const hotelName = typeof hotelData.name === "string" ? hotelData.name : "Hotel";
+        const hotelLogoUrl =
+            hotelData.logo && typeof hotelData.logo === "object" && typeof (hotelData.logo as { url?: string }).url === "string"
+                ? (hotelData.logo as { url: string }).url
+                : undefined;
+
+        const codesResult = await qrCodeService.getQrCodesForDownload(hotelId, query);
+        if (!codesResult.success || !codesResult.data) {
+            return res.status(404).json({
+                success: false,
+                message: codesResult.message,
+            });
+        }
+
+        const pdfResult = await qrCodeService.generateQrPdf(codesResult.data, { hotelLogoUrl });
+        if (!pdfResult.success || !pdfResult.data) {
+            return res.status(500).json({
+                success: false,
+                message: pdfResult.message ?? "Failed to generate PDF",
+            });
+        }
+
+        const sanitize = (s: string) => s.replace(/[^a-zA-Z0-9-_]/g, "-").replace(/-+/g, "-").trim() || "";
+        const safeName = sanitize(hotelName) || "hotel";
+        const parts = [safeName, query.type];
+        if (query.type === "ROOM") {
+            if (query.floor) parts.push(`floor-${sanitize(query.floor)}`);
+            if (query.roomNumber) parts.push(`room-${sanitize(query.roomNumber)}`);
+        } else {
+            if (query.zone) parts.push(`zone-${sanitize(query.zone)}`);
+            if (query.tableNumber) parts.push(`table-${sanitize(query.tableNumber)}`);
+        }
+        const filename = `${parts.filter(Boolean).join("-")}.pdf`;
+        res.setHeader("Content-Type", "application/pdf");
+        res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+        return res.send(pdfResult.data);
     });
 
     /**

@@ -1,0 +1,33 @@
+<div class="w-[4in] h-[6in] relative flex flex-col justify-between items-center text-center px-8 py-8 rounded-lg overflow-hidden" style="
+      background-image: url('https://res.cloudinary.com/dpqsatnvt/image/upload/v1771284030/background_s5yeyd.png');
+      background-size: cover;
+      background-position: center;
+      background-repeat: no-repeat;
+    ">
+    <div class="relative z-10 w-full flex flex-col items-center justify-start h-full p-2 py-4 border border-dashed border-white/40 rounded-lg">
+        <div class="flex flex-col w-full items-center">
+            <img src="{{HOTEL_LOGO}}" alt="Hotel Logo" class="max-w-[80px] aspect-square bg-white p-px rounded-full object-contain mb-3 drop-shadow-sm" />
+
+            <div class="w-full h-px bg-gradient-to-r from-transparent via-white to-transparent my-2"></div>
+        </div>
+        <div class="mt-4 flex flex-col items-center justify-center">
+            <p class="text-sm text-white/70 mt-1 capitalize">
+                {{ROOM_NUMBER}}
+            </p>
+            <div class="bg-white border-2 border-orange-500 mt-4 border-dashed shadow-xl p-5 rounded-md">
+                <img src="{{QR_CODE_URL}}" alt="QR Code" class="w-[150px] h-[150px]" />
+            </div>
+            <p class="text-lg text-white mt-4 font-medium tracking-normal text-balance max-w-[300px]">
+                Instant access to all hotel services
+            </p>
+            <p class="text-xs text-white/70 mt-1 capitalize">
+                No app download required
+            </p>
+        </div>
+        <div class="absolute bottom-0 left-0 right-0">
+            <p class="text-sm text-white tracking-normal">
+                Powered by TableMitra
+            </p>
+        </div>
+    </div>
+</div>

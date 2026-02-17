@@ -7,10 +7,13 @@ import qrCodeRoutes from "./modules/qr-code/qr-code.routes.js";
 import attachmentRoutes from "./modules/attachments/attach.routes.js";
 import menuRoutes from "./modules/menu/menu.routes.js";
 import serviceRoutes from "./modules/service/service.routes.js";
-
+import { handleCustomerScan } from "./modules/customer/customer.controller.js";
 
 // mergeParams: true to inherit :app from parent route
 const router = Router({ mergeParams: true });
+
+// Customer scan (ROOM QR): redirect flow, only for app=customer. Must be before /auth so /scan/:code is exact.
+router.get("/scan/:code", handleCustomerScan);
 
 // Auth routes
 router.use("/auth", authRoutes);

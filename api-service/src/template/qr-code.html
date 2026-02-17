@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8" />
+    <title>TableMitra Luxury QR Standee</title>
+
+    <!-- Google Font: DM Sans -->
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&display=swap"
+        rel="stylesheet">
+
+    <!-- Tailwind CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <style>
+        @page {
+            size: A4;
+            margin: 0;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'DM Sans', sans-serif;
+            display: block;
+        }
+        /* One QR per page: each .qr-card is one A4 page, 4×6 card centered inside */
+        .qr-card {
+            page-break-after: always;
+            page-break-inside: avoid;
+            width: 210mm;
+            min-height: 297mm;
+            height: 297mm;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-sizing: border-box;
+        }
+        .qr-card:last-child {
+            page-break-after: auto;
+        }
+    </style>
+</head>
+
+<body class="m-0 p-0">
+    {{CARDS}}
+</body>
+</html>

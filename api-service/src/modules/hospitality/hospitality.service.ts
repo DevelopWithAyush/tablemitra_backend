@@ -826,6 +826,71 @@ class HospitalityService {
         };
     };
 
+    /**
+     * Attach a customer (userId) to a room session: get or create session, add user to metadata.
+     * Used when customer scans ROOM QR (after login or in verify-otp with scanToken).
+     * Returns room context for setting customer_room_* cookies.
+     */
+    attachCustomerToRoomSession = async (
+        hotelId: string,
+        roomNumber: string,
+        userId: string
+    ): Promise<ServiceResult<{ hotelId: string; roomNumber: string; roomSessionId: string }>> => {
+        const hid = new Types.ObjectId(hotelId);
+        const uid = new Types.ObjectId(userId);
+        const room = roomNumber.trim();
+
+        let session = await RoomSession.findOne({
+            hotelId: hid,
+            roomNumber: room,
+            status: "ACTIVE",
+        }).lean();
+
+        if (!session) {
+            const roomExists = await qrCodeService.isValidRoomForHotel(hotelId, room);
+            if (!roomExists) {
+                return { success: false, message: "Room does not exist for this hotel" };
+            }
+            const [created] = await RoomSession.create([
+                {
+                    hotelId: hid,
+                    roomNumber: room,
+                    status: "ACTIVE",
+                    metadata: {
+                        guests: [{ userId: uid }],
+                        guestCount: 1,
+                    },
+                },
+            ]);
+            session = created.toObject();
+            await qrCodeService.invalidateHotelQrCache(hotelId);
+        } else {
+            const existing = await RoomSession.findById(session._id).lean();
+            const guests = (existing?.metadata?.guests ?? []) as Array<{ userId?: Types.ObjectId }>;
+            const alreadyIn = guests.some(
+                (g) => g.userId && g.userId.toString() === userId
+            );
+            if (!alreadyIn) {
+                await RoomSession.updateOne(
+                    { _id: session._id },
+                    {
+                        $push: { "metadata.guests": { userId: uid } },
+                        $inc: { "metadata.guestCount": 1 },
+                    }
+                );
+            }
+        }
+
+        return {
+            success: true,
+            data: {
+                hotelId,
+                roomNumber: room,
+                roomSessionId: session._id.toString(),
+            },
+        };
+    };
+
     // ==================== List Methods ====================
 
     getAllChains = async (

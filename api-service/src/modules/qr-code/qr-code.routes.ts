@@ -12,6 +12,7 @@ import {
     HotelIdParamSchema,
     ScanQrCodeSchema,
     DeleteQrCodeSchema,
+    DownloadQrCodesSchema,
 } from "./validator/qr-code.validator.js";
 
 const qrCodeRoutes = Router({ mergeParams: true });
@@ -43,6 +44,14 @@ qrCodeRoutes.get(
     requirePermissions("VIEW_QR", "all", true),
     validate(GetQrCodesSchema),
     qrCodeController.getQrCodes
+);
+
+// Download QR codes as PDF (filter by type + optional floor/room or zone/table)
+qrCodeRoutes.get(
+    "/hotels/:hotelId/download",
+    requirePermissions("VIEW_QR", "all", true),
+    validate(DownloadQrCodesSchema),
+    qrCodeController.downloadQrCodesPdf
 );
 
 // Get Distinct Locations
@@ -83,6 +92,8 @@ qrCodeRoutes.delete(
     requirePermissions("UPDATE_QR", "all", true),
     validate(DeleteQrCodeSchema),
     qrCodeController.deleteQrCode
-);
+); 
+
+
 
 export default qrCodeRoutes;

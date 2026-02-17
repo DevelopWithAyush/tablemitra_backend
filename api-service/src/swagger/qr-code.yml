@@ -110,6 +110,77 @@ paths:
         '401':
           description: Unauthorized
 
+  /api/v1/{app}/qr-codes/hotels/{hotelId}/download:
+    get:
+      tags:
+        - QR Codes
+      summary: Download QR codes as PDF
+      description: |
+        Generates a PDF of QR codes for the hotel. Hotel details (name, logo) are fetched from the hospitality module.
+        **Required:** `type` (ROOM | RESTAURANT | BAR).
+        **Optional filters:** For ROOM use `floor` and/or `roomNumber`; for RESTAURANT/BAR use `zone` and/or `tableNumber`.
+        If no optional filters are provided, all QR codes of that type for the hotel are included.
+        Response is a PDF file (one A4 page per QR code, 4×6 inch card per page). Filename includes hotel name and query (e.g. `HotelName-ROOM-floor-1.pdf`).
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/AppParam'
+        - $ref: '#/components/parameters/HotelIdParam'
+        - name: type
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [ROOM, RESTAURANT, BAR]
+          description: Type of QR codes to include (required)
+        - name: floor
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 100
+          description: Filter by floor (ROOM only)
+        - name: roomNumber
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 50
+          description: Filter by room number (ROOM only)
+        - name: zone
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 100
+          description: Filter by zone (RESTAURANT/BAR only)
+        - name: tableNumber
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 50
+          description: Filter by table number (RESTAURANT/BAR only)
+      responses:
+        '200':
+          description: PDF file (one A4 page per QR code). Content-Disposition attachment with filename like HotelName-ROOM-floor-1.pdf
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        '404':
+          description: Hotel not found or no QR codes match the filters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden (VIEW_QR required)
+
   /api/v1/{app}/qr-codes/hotels/{hotelId}/locations:
     get:
       tags:

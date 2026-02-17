@@ -9,7 +9,8 @@ export const SendOtpSchema = z.object({
 export const VerifyOtpSchema = z.object({
     body: z.object({
         phone: z.string().regex(/^\+?[1-9]\d{1,14}$/),
-        code: z.string().length(4)
+        code: z.string().length(4),
+        scanToken: z.string().min(1).optional(),
     }),
 });
 
@@ -26,7 +27,7 @@ export interface SendOtpDTO {
 }
 
 export interface VerifyOtpDTO {
-    body: { phone: string; code: string };
+    body: { phone: string; code: string; scanToken?: string };
     params: { app: string };
 }
 

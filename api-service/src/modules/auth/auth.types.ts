@@ -68,12 +68,20 @@ export interface IJwtPayload {
     exp?: number;
 }
 
+export interface CustomerRoomContext {
+    hotelId: string;
+    roomNumber: string;
+    roomSessionId: string;
+}
+
 export interface VerifyOtpSuccessResult {
     success: true;
     accessToken: string;
     refreshToken: string;
     userId: string;
     roleKey: string;
+    /** Set when customer login had scanToken; used to set room context cookies */
+    roomContext?: CustomerRoomContext;
 }
 
 export interface VerifyOtpFailureResult {

@@ -292,7 +292,7 @@ export const getVariants = asyncHandler(async (req: Request, res: Response) => {
  * Get full menu with nested structure (super-search).
  * GET /menu-items?search=...&categoryIds=...&minPrice=...&maxPrice=...&type=...&isPopular=...&activeOnly=...
  */
-export const getFullMenu = asyncHandler(async (req: Request, res: Response) => {
+export const  getFullMenu = asyncHandler(async (req: Request, res: Response) => {
     const hotelId = getHotelIdFromContext(req);
     const parsed = GetFullMenuValidation.parse({ query: req.query });
 

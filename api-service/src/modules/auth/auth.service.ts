@@ -1,3 +1,4 @@
+import { randomBytes } from "crypto";
 import { ClientSession } from "mongoose";
 import { getRedis } from "../../infra/redis/redis.js";
 import { runInTransaction } from "../../infra/db/transaction.js";
@@ -7,7 +8,7 @@ import { sendOTP } from "../../utils/send-message.js";
 import companyService from "../company/company.service.js";
 import hospitalityService from "../hospitality/hospitality.service.js";
 import { getUserPermissions } from "./admin/permission-cache.service.js";
-import { GetMeResult, IJwtPayload, SendOtpDTO, VerifyOtpDTO, VerifyOtpResult } from "./auth.types.js";
+import { CustomerRoomContext, GetMeResult, IJwtPayload, SendOtpDTO, VerifyOtpDTO, VerifyOtpResult } from "./auth.types.js";
 import Customer from "./db/customer-profile.model.js";
 import Role from "./db/role.model.js";
 import Session from "./db/sessions.model.js";
@@ -62,7 +63,35 @@ const ACTIVE_USER_ROLE_FILTER = {
     isBlocked: false,
 };
 
+const CUSTOMER_SCAN_TOKEN_PREFIX = "customer_scan_token:";
+const CUSTOMER_SCAN_TOKEN_TTL_SECONDS = 600; // 10 min
+
 class AuthService {
+    /**
+     * Create a temporary scan token for customer login redirect. Stored in Redis.
+     */
+    createScanToken = async (payload: { hotelId: string; roomNumber: string }): Promise<string> => {
+        const token = randomBytes(24).toString("hex");
+        const key = CUSTOMER_SCAN_TOKEN_PREFIX + token;
+        await getRedis().set(key, JSON.stringify(payload), { EX: CUSTOMER_SCAN_TOKEN_TTL_SECONDS });
+        return token;
+    };
+
+    /**
+     * Consume scan token: load payload from Redis and delete. Returns null if expired/invalid.
+     */
+    consumeScanToken = async (token: string): Promise<{ hotelId: string; roomNumber: string } | null> => {
+        const key = CUSTOMER_SCAN_TOKEN_PREFIX + token;
+        const raw = await getRedis().get(key);
+        if (!raw) return null;
+        await getRedis().del(key);
+        try {
+            return JSON.parse(raw) as { hotelId: string; roomNumber: string };
+        } catch {
+            return null;
+        }
+    };
+
     /**
      * Verifies user exists and has the required role
      * Checks: isActive, isDeleted, isBlocked
@@ -266,7 +295,7 @@ class AuthService {
     };
 
     verifyOtp = async (dto: VerifyOtpDTO): Promise<VerifyOtpResult> => {
-        const { body: { phone, code }, params: { app } } = dto;
+        const { body: { phone, code, scanToken }, params: { app } } = dto;
         const roleDbKey = APP_ROLE_MAP[app];
 
         if (!roleDbKey) {
@@ -306,12 +335,28 @@ class AuthService {
                 session
             );
 
-            return {
+            const base: VerifyOtpResult = {
                 success: true as const,
                 ...tokens,
                 userId,
                 roleKey: roleDbKey,
             };
+
+            if (app === "customer" && scanToken?.trim()) {
+                const payload = await this.consumeScanToken(scanToken.trim());
+                if (payload) {
+                    const roomResult = await hospitalityService.attachCustomerToRoomSession(
+                        payload.hotelId,
+                        payload.roomNumber,
+                        userId
+                    );
+                    if (roomResult.success && roomResult.data) {
+                        (base as { roomContext?: CustomerRoomContext }).roomContext = roomResult.data;
+                    }
+                }
+            }
+
+            return base;
         });
 
         return result;

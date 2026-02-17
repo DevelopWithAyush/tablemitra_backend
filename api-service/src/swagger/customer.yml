@@ -1,0 +1,58 @@
+# Customer-facing APIs (scan flow, room context). app must be "customer" for scan.
+tags:
+  - name: Customer
+    description: Customer scan and room context (ROOM QR flow)
+
+paths:
+  /api/v1/{app}/scan/{code}:
+    get:
+      tags:
+        - Customer
+      summary: Customer scan (ROOM QR redirect flow)
+      description: |
+        **Only for app=customer.** Entry point when a customer scans a ROOM QR code.
+        - Resolves the code to hotel + room. If invalid or not ROOM type, redirects to login with ?error=invalid_qr or ?error=room_only.
+        - If customer is **not** logged in: creates a temporary scan token, stores it in Redis, and **redirects (302)** to the customer login URL with `?scanToken=...`. After login, the frontend should call verify-otp with this scanToken in the body so the backend can attach the customer to the room and set room context cookies.
+        - If customer **is** logged in (cookie `accessToken_customer` or Bearer token): attaches customer to the room session (get or create), sets room context cookies, and **redirects (302)** to the customer app URL.
+        Response is always a **redirect**; no JSON body. Requires env CUSTOMER_LOGIN_URL and CUSTOMER_APP_URL.
+      parameters:
+        - name: app
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [customer]
+          description: Must be "customer"
+        - name: code
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^TMQR-[A-Z0-9]{10}$'
+          example: TMQR-AB3CDE7FGH
+          description: QR code (e.g. from ROOM QR)
+      responses:
+        "302":
+          description: Redirect to login (with ?scanToken=...) or to customer app (with room context cookies set)
+          headers:
+            Location:
+              description: CUSTOMER_LOGIN_URL or CUSTOMER_APP_URL
+              schema:
+                type: string
+            Set-Cookie:
+              description: When logged in, sets customer_room_hotel_id, customer_room_room_number, customer_room_session_id
+              schema:
+                type: string
+        "404":
+          description: app is not "customer"
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: false
+                  message:
+                    type: string
+                    example: "Not found"

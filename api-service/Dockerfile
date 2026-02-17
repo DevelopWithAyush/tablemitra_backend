@@ -17,6 +17,10 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 
+# Chromium + deps for Puppeteer (QR PDF download)
+RUN apk add --no-cache chromium nss freetype harfbuzz ca-certificates ttf-freefont
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
+
 COPY package*.json ./
 RUN npm ci --only=production && npm cache clean --force
 

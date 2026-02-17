@@ -1,5 +1,8 @@
 import { ClientSession, Types } from "mongoose";
 import { customAlphabet } from "nanoid";
+import path from "path";
+import { readFile } from "fs/promises";
+import QRCode from "qrcode";
 import { getRedis } from "../../infra/redis/redis.js";
 import { runInTransaction } from "../../infra/db/transaction.js";
 import QrSet from "./db/qr-sets.model.js";
@@ -737,6 +740,142 @@ class QrCodeService {
                 success: false,
                 message: error.message || "Failed to get QR code",
             };
+        }
+    }
+
+    /**
+     * Get QR codes for PDF download: filter by type and optional floor/room or zone/table.
+     * Returns list of active codes for the hotel's QR set.
+     */
+    async getQrCodesForDownload(
+        hotelId: string,
+        query: { type: "ROOM" | "RESTAURANT" | "BAR"; floor?: string; roomNumber?: string; zone?: string; tableNumber?: string }
+    ): Promise<ServiceResult<IQrCodeInfo[]>> {
+        try {
+            const set = await QrSet.findOne({ hotelId: new Types.ObjectId(hotelId) }).select("_id").lean();
+            if (!set) return { success: false, message: "QR Set not found for this hotel" };
+
+            const filter: Record<string, unknown> = {
+                qrSetId: set._id,
+                type: query.type,
+                isActive: true,
+            };
+
+            if (query.type === "ROOM") {
+                if (query.floor) filter.floor = query.floor;
+                if (query.roomNumber) filter.roomNumber = query.roomNumber;
+            } else {
+                if (query.zone) filter.zone = query.zone;
+                if (query.tableNumber) filter.tableNumber = query.tableNumber;
+            }
+
+            const docs = await QrCode.find(filter)
+                .select("code type floor roomNumber zone tableNumber")
+                .sort({ floor: 1, roomNumber: 1, zone: 1, tableNumber: 1 })
+                .lean();
+
+            const list = docs.map((d: any) => this.mapToInfo(d)) as IQrCodeInfo[];
+            if (list.length === 0) {
+                return { success: false, message: "No QR codes found for the given filters" };
+            }
+
+            return { success: true, message: "OK", data: list };
+        } catch (error: any) {
+            return { success: false, message: error?.message ?? "Failed to fetch QR codes for download" };
+        }
+    }
+
+    /**
+     * Generate PDF buffer from QR codes using the HTML template.
+     * ROOM QR codes use backend customer scan URL so scan triggers redirect flow (login → room session → cookies).
+     * Hotel logo from options (from hospitality service) or env fallback.
+     */
+    async generateQrPdf(
+        codes: IQrCodeInfo[],
+        options?: { hotelLogoUrl?: string }
+    ): Promise<ServiceResult<Buffer>> {
+        const customerScanBaseUrl =
+            process.env.CUSTOMER_SCAN_BASE_URL ??
+            process.env.BASE_URL ??
+            "https://api.tablemitra.com";
+        const hotelLogoUrl =
+            options?.hotelLogoUrl ??
+            process.env.QR_HOTEL_LOGO_URL ??
+            "https://res.cloudinary.com/dpqsatnvt/image/upload/v1771284030/background_s5yeyd.png";
+
+        try {
+            const templateDir = path.join(process.cwd(), "src", "template");
+            const [baseHtml, cardHtml] = await Promise.all([
+                readFile(path.join(templateDir, "qr-code.html"), "utf-8"),
+                readFile(path.join(templateDir, "qr-code-card.html"), "utf-8"),
+            ]);
+
+            const cards: string[] = [];
+            for (const code of codes) {
+                const scanUrl =
+                    code.type === "ROOM"
+                        ? `${customerScanBaseUrl.replace(/\/$/, "")}/api/v1/customer/scan/${code.code}`
+                        : `${process.env.QR_SCAN_BASE_URL ?? process.env.FRONTEND_URL ?? "https://customer.tablemitra.com"}`.replace(/\/$/, "") + `/scan/${code.code}`;
+                const qrDataUrl = await QRCode.toDataURL(scanUrl, { width: 150, margin: 0 });
+                const label =
+                    code.type === "ROOM"
+                        ? (code.floor && code.roomNumber
+                            ? `Floor ${code.floor} - Room ${code.roomNumber}`
+                            : code.roomNumber
+                                ? `Room ${code.roomNumber}`
+                                : code.floor ?? code.code)
+                        : (code.zone && code.tableNumber
+                            ? `${code.zone} - Table ${code.tableNumber}`
+                            : code.tableNumber
+                                ? `Table ${code.tableNumber}`
+                                : code.zone ?? code.code);
+
+                const filled = cardHtml
+                    .replace(/\{\{HOTEL_LOGO\}\}/g, hotelLogoUrl)
+                    .replace(/\{\{ROOM_NUMBER\}\}/g, label || code.code)
+                    .replace(/\{\{QR_CODE_URL\}\}/g, qrDataUrl);
+                cards.push(`<div class="qr-card">${filled}</div>`);
+            }
+
+            const fullHtml = baseHtml.replace("{{CARDS}}", cards.join(""));
+
+            const puppeteer = await import("puppeteer-core");
+            const systemChrome = process.env.PUPPETEER_EXECUTABLE_PATH;
+            const launchOpts: Parameters<typeof puppeteer.default.launch>[0] = {
+                headless: true,
+                args: [
+                    "--no-sandbox",
+                    "--disable-setuid-sandbox",
+                    "--disable-dev-shm-usage",
+                    "--disable-gpu",
+                ],
+            };
+            if (systemChrome) {
+                launchOpts.executablePath = systemChrome;
+            } else {
+                const chromium = (await import("@sparticuz/chromium")).default;
+                launchOpts.executablePath = await chromium.executablePath();
+                launchOpts.args = chromium.args;
+                launchOpts.defaultViewport = chromium.defaultViewport;
+                launchOpts.headless = chromium.headless;
+            }
+            const browser = await puppeteer.default.launch(launchOpts);
+            try {
+                const page = await browser.newPage();
+                await page.setContent(fullHtml, { waitUntil: "networkidle0" });
+                const pdfBuffer = await page.pdf({
+                    format: "A4",
+                    printBackground: true,
+                    margin: { top: 0, right: 0, bottom: 0, left: 0 },
+                    preferCSSPageSize: false,
+                });
+                return { success: true, message: "OK", data: Buffer.from(pdfBuffer) };
+            } finally {
+                await browser.close();
+            }
+        } catch (error: any) {
+            logger.error("QR PDF generation failed", { error: error?.message });
+            return { success: false, message: error?.message ?? "Failed to generate PDF" };
         }
     }
 }

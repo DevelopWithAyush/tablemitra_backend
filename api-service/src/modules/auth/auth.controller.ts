@@ -46,6 +46,7 @@ class AuthController {
         const { accessToken, refreshToken } = result;
         const ACCESS_TOKEN_MAX_AGE = 15 * 60 * 1000;
         const REFRESH_TOKEN_MAX_AGE = 30 * 24 * 60 * 60 * 1000;
+        const CUSTOMER_ROOM_CONTEXT_MAX_AGE = 24 * 60 * 60 * 1000; // 24h
 
         res.cookie(`refreshToken_${app}`, refreshToken, {
             httpOnly: true,
@@ -59,6 +60,13 @@ class AuthController {
             sameSite: 'none',
             maxAge: ACCESS_TOKEN_MAX_AGE,
         });
+
+        if (app === "customer" && result.roomContext) {
+            const opts = { httpOnly: true, secure: true, sameSite: "none" as const, maxAge: CUSTOMER_ROOM_CONTEXT_MAX_AGE };
+            res.cookie("customer_room_hotel_id", result.roomContext.hotelId, opts);
+            res.cookie("customer_room_room_number", result.roomContext.roomNumber, opts);
+            res.cookie("customer_room_session_id", result.roomContext.roomSessionId, opts);
+        }
 
         publishAuditEvent(
             "USER_LOGIN",

@@ -17,7 +17,8 @@ import {
     GetLocationsSchema,
     HotelIdParamSchema,
     ScanQrCodeSchema,
-    DeleteQrCodeSchema
+    DeleteQrCodeSchema,
+    DownloadQrCodesSchema,
 } from "./validator/qr-code.validator.js";
 
 // ========================
@@ -89,6 +90,8 @@ export type GetLocationsQuery = z.infer<typeof GetLocationsSchema>["query"];
 export type ScanQrCodeParams = z.infer<typeof ScanQrCodeSchema>["params"];
 export type DeleteQrCodeParams = z.infer<typeof DeleteQrCodeSchema>["params"];
 export type DeleteQrCodeBody = z.infer<typeof DeleteQrCodeSchema>["body"];
+export type DownloadQrCodesParams = z.infer<typeof DownloadQrCodesSchema>["params"];
+export type DownloadQrCodesQuery = z.infer<typeof DownloadQrCodesSchema>["query"];
 
 export interface IQrCodeInfo {
     id: string;

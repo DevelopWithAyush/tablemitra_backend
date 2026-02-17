@@ -53,7 +53,13 @@ paths:
       tags:
         - Auth
       summary: Verify OTP and get tokens
-      description: Verifies the OTP and returns access token. Sets refresh token in httpOnly cookie.
+      description: |
+        Verifies the OTP and returns access token. Sets refresh token in httpOnly cookie.
+        **Customer + scanToken (room scan flow):** When `app=customer` and body includes `scanToken` (from redirect after scanning ROOM QR while not logged in), backend consumes the token, attaches the customer to the room session (get or create), and sets **room context cookies** in the same response:
+        - `customer_room_hotel_id`
+        - `customer_room_room_number`
+        - `customer_room_session_id`
+        These are separate from auth cookies and used for menu, orders, and services in that room.
       parameters:
         - name: app
           in: path
@@ -82,12 +88,15 @@ paths:
                   maxLength: 4
                   example: "1234"
                   description: 4-digit OTP code
+                scanToken:
+                  type: string
+                  description: Optional. When app=customer, pass the token from login redirect (?scanToken=...) to attach this customer to the room and set room context cookies.
       responses:
         "200":
-          description: OTP verified, tokens issued
+          description: OTP verified, tokens issued. If app=customer and scanToken was valid, room context cookies are also set.
           headers:
             Set-Cookie:
-              description: Sets accessToken and refreshToken cookies
+              description: accessToken and refreshToken; when app=customer and scanToken provided, also customer_room_hotel_id, customer_room_room_number, customer_room_session_id
               schema:
                 type: string
           content:

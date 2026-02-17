@@ -1,34 +1,34 @@
 import { Router } from "express";
   
+import { authMiddleware } from "../../middleware/auth.middleware.js";
 import { requirePermissions } from "../../middleware/permission.middleware.js";
 import { validate } from "../../middleware/validate.middleware.js";
 import {
-    GetCategoriesValidation,
-    CreateCategoryValidation,
-    UpdateCategoryValidation,
-    ToggleCategoryValidation,
-    GetItemsValidation,
-    CreateItemValidation,
-    UpdateItemValidation,
-    ToggleItemValidation,
-    GetItemByIdValidation,
-    GetVariantsValidation,
-    GetFullMenuValidation,
-} from "./validator/menu.validator.js";
-import {
-    getCategories,
     createCategory,
-    updateCategory,
-    toggleCategory,
-    getItems,
     createItem,
-    updateItem,
-    toggleItem,
-    getItemDetail,
-    getVariants,
+    getCategories,
     getFullMenu,
+    getItemDetail,
+    getItems,
+    getVariants,
+    toggleCategory,
+    toggleItem,
+    updateCategory,
+    updateItem
 } from "./menu.controller.js";
-import { authMiddleware } from "../../middleware/auth.middleware.js";
+import {
+    CreateCategoryValidation,
+    CreateItemValidation,
+    GetCategoriesValidation,
+    GetFullMenuValidation,
+    GetItemByIdValidation,
+    GetItemsValidation,
+    GetVariantsValidation,
+    ToggleCategoryValidation,
+    ToggleItemValidation,
+    UpdateCategoryValidation,
+    UpdateItemValidation,
+} from "./validator/menu.validator.js";
 
 const menuRoutes = Router({ mergeParams: true });
 
@@ -129,6 +129,10 @@ menuRoutes.get(
     requirePermissions("VIEW_MENU"),
     validate(GetFullMenuValidation),
     getFullMenu
-);
+); 
+
+
+
+// menuRoutes.get("/user/menu", requirePermissions("VIEW_MENU"), getUserMenu);
 
 export default menuRoutes;

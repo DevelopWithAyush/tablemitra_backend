@@ -101,3 +101,27 @@ export const DeleteQrCodeSchema = z.object({
         reason: z.string().optional(),
     }),
 });
+
+// 7. Download QR Codes as PDF
+const DownloadQuerySchema = z
+    .object({
+        type: QrTypeSchema,
+        floor: z.string().min(1).max(100).optional(),
+        roomNumber: z.string().min(1).max(50).optional(),
+        zone: z.string().min(1).max(100).optional(),
+        tableNumber: z.string().min(1).max(50).optional(),
+    })
+    .refine(
+        (data) => {
+            if (data.type === "ROOM") return data.zone === undefined && data.tableNumber === undefined;
+            return data.floor === undefined && data.roomNumber === undefined;
+        },
+        { message: "For ROOM use only floor/roomNumber; for RESTAURANT/BAR use only zone/tableNumber" }
+    );
+
+export const DownloadQrCodesSchema = z.object({
+    params: z.object({
+        hotelId: MongoIdSchema,
+    }),
+    query: DownloadQuerySchema,
+});

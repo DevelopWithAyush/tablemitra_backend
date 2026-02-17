@@ -166,6 +166,7 @@ const rolePermissionMap: Record<string, string[]> = {
         "CREATE_ORDER",
         "VIEW_ORDER",
         "CREATE_ATTACHMENT",
+        
     ]
 };
 
