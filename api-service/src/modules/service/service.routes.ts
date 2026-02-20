@@ -12,6 +12,7 @@ import {
     UpdateServiceValidation,
     ToggleServiceValidation,
     GetFullCatalogValidation,
+    GetUserServiceCatalogValidation,
 } from "./validator/service.validator.js";
 import {
     getCategories,
@@ -23,12 +24,16 @@ import {
     updateService,
     toggleService,
     getFullCatalog,
+    getServiceCatalogForUser,
 } from "./service.controller.js";
 
 const serviceRoutes = Router({ mergeParams: true });
 
 // Auth middleware - uses req.params.app
 serviceRoutes.use(authMiddleware);
+
+// User service catalog (customer-facing); hotel from query or cookie
+serviceRoutes.get("/user-catalog", validate(GetUserServiceCatalogValidation), getServiceCatalogForUser);
 
 // ==================== CATEGORY ROUTES ====================
 

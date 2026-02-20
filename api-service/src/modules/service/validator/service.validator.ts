@@ -144,6 +144,13 @@ export const GetFullCatalogValidation = z.object({
     }),
 });
 
+// User service catalog (customer-facing): hotelId optional (else from cookie customer_room_hotel_id)
+export const GetUserServiceCatalogValidation = z.object({
+    query: z.object({
+        hotelId: MongoIdField.optional(),
+    }),
+});
+
 // ==================== AUTO-GENERATED DTO TYPES ====================
 
 export type AvailabilityDTO = z.infer<typeof AvailabilitySchema>;

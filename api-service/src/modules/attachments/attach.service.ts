@@ -208,6 +208,27 @@ class AttachmentService {
     };
 
     /**
+     * Get URL map for many attachments by ID (used by menu/user services for image URLs).
+     * Returns only active attachments; missing IDs are omitted from the map.
+     */
+    getAttachmentUrlsByIds = async (attachmentIds: string[]): Promise<Record<string, string>> => {
+        if (attachmentIds.length === 0) return {};
+        const { Types } = await import("mongoose");
+        const ids = attachmentIds.filter((id) => id).map((id) => new Types.ObjectId(id));
+        const list = await Attachment.find({
+            _id: { $in: ids },
+            status: AttachmentStatus.ACTIVE,
+        })
+            .select("_id url")
+            .lean();
+        const map: Record<string, string> = {};
+        for (const a of list) {
+            if (a.url) map[a._id.toString()] = a.url;
+        }
+        return map;
+    };
+
+    /**
      * Cleanup expired pending attachments
      * This should be called periodically (e.g., every 5-10 minutes)
      */

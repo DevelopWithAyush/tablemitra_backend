@@ -23,9 +23,18 @@ import {
     GetFullMenuOptions,
     VariantPriceRange,
     MenuAuditContext,
+    UserMenuResponse,
+    UserMenuCategory,
+    UserMenuItem,
+    ItemDetailForCustomer,
+    ItemDetailVariant,
+    ItemDetailSuggestedItem,
 } from "./menu.types.js";
+import type { IAvailability } from "./menu.types.js";
 import logger from "../../helpers/logger/index.js";
 import { publishAuditEvent } from "../audit/audit.publisher.js";
+import { isItemAvailable } from "./availability.util.js";
+import attachmentService from "../attachments/attach.service.js";
 
 // ==================== CACHE CONFIGURATION ====================
 
@@ -36,9 +45,11 @@ const CACHE_KEYS = {
     ITEM_BY_ID: (hotelId: string, itemId: string) => `menu:${hotelId}:items:${itemId}`,
     VARIANTS_LIST: (hotelId: string, itemId: string) => `menu:${hotelId}:items:${itemId}:variants`,
     FULL_MENU: (hotelId: string) => `menu:${hotelId}:full`,
+    USER_MENU: (hotelId: string) => `menu:${hotelId}:user_menu`,
 };
 
 const CACHE_TTL = 1800; // 30 minutes
+const USER_MENU_TTL = 300; // 5 minutes
 
 // ==================== HELPER FUNCTIONS ====================
 
@@ -1034,6 +1045,260 @@ class MenuService {
         }
 
         return { success: true, data: result };
+    };
+
+    // ==================== USER MENU (CUSTOMER-FACING) ====================
+
+    /** Raw cached item: no isAvailable (computed per request). */
+    private static rawUserMenuItem = (): {
+        id: string;
+        name: string;
+        description?: string;
+        price: number;
+        discountedPrice?: number;
+        image: string | null;
+        hasVariants: boolean;
+        availability?: IAvailability;
+        type?: "veg" | "non-veg" | "egg";
+    } => ({} as any);
+
+    /**
+     * Get menu for customer: active categories and items, single image URL per item,
+     * min price for variant items, isAvailable computed per request using hotel timezone.
+     * Raw menu (without isAvailable) is cached for 5 minutes.
+     */
+    getMenuForUser = async (
+        hotelId: string,
+        hotelTimezone: string
+    ): Promise<ServiceResult<UserMenuResponse>> => {
+        const redis = getRedis();
+        const cacheKey = CACHE_KEYS.USER_MENU(hotelId);
+
+        let raw: { categories: { id: string; name: string; image: string | null; items: ReturnType<typeof MenuService.rawUserMenuItem>[] }[] };
+        const cached = await redis.get(cacheKey);
+        if (cached) {
+            raw = JSON.parse(cached);
+        } else {
+            const categories = await CategoryModel.find({
+                hotelId: new Types.ObjectId(hotelId),
+                isActive: true,
+            })
+                .sort({ sortOrder: 1 })
+                .select("_id name image")
+                .lean();
+            if (categories.length === 0) {
+                return { success: true, data: { categories: [] } };
+            }
+            const categoryIds = categories.map((c) => c._id);
+            const items = await ItemModel.find({
+                hotelId: new Types.ObjectId(hotelId),
+                categoryId: { $in: categoryIds },
+                isActive: true,
+            })
+                .sort({ sortOrder: 1 })
+                .select("categoryId name description price discountedPrice minVariantPrice hasVariants availability image type")
+                .lean();
+            const itemImageIds = [...new Set(items.map((i) => i.image?.toString()).filter(Boolean) as string[])];
+            const categoryImageIds = [...new Set(categories.map((c) => (c as { image?: Types.ObjectId }).image?.toString()).filter(Boolean) as string[])];
+            const imageIds = [...new Set([...itemImageIds, ...categoryImageIds])];
+            const urlMap = await attachmentService.getAttachmentUrlsByIds(imageIds);
+            const itemMap = new Map<string, typeof items>();
+            for (const item of items) {
+                const cid = item.categoryId.toString();
+                if (!itemMap.has(cid)) itemMap.set(cid, []);
+                itemMap.get(cid)!.push(item);
+            }
+            raw = {
+                categories: categories.map((cat) => {
+                    const catItems = itemMap.get(cat._id.toString()) || [];
+                    const catImage = (cat as { image?: Types.ObjectId }).image;
+                    return {
+                        id: cat._id.toString(),
+                        name: cat.name,
+                        image: (catImage && urlMap[catImage.toString()]) || null,
+                        items: catItems.map((i) => {
+                            const price = i.hasVariants ? (i.minVariantPrice ?? 0) : (i.price ?? 0);
+                            return {
+                                id: i._id.toString(),
+                                name: i.name,
+                                description: i.description ?? undefined,
+                                price,
+                                discountedPrice: i.discountedPrice ?? undefined,
+                                image: (i.image && urlMap[i.image.toString()]) || null,
+                                hasVariants: i.hasVariants ?? false,
+                                availability: i.availability as IAvailability | undefined,
+                                type: (i as { type?: "veg" | "non-veg" | "egg" }).type ?? "veg",
+                            };
+                        }),
+                    };
+                }),
+            };
+            await redis.setEx(cacheKey, USER_MENU_TTL, JSON.stringify(raw));
+        }
+
+        const response: UserMenuResponse = {
+            categories: raw.categories.map((cat) => ({
+                id: cat.id,
+                name: cat.name,
+                image: cat.image ?? null,
+                items: cat.items.map((it) => ({
+                    id: it.id,
+                    name: it.name,
+                    price: it.price,
+                    discountedPrice: it.discountedPrice,
+                    description: it.description,
+                    image: it.image,
+                    isAvailable: isItemAvailable(it.availability, hotelTimezone),
+                    hasVariants: it.hasVariants,
+                    type: (it as { type?: "veg" | "non-veg" | "egg" }).type ?? "veg",
+                })) as UserMenuItem[],
+            })) as UserMenuCategory[],
+        };
+        return { success: true, data: response };
+    };
+
+    /**
+     * Item detail for customer (add-to-cart dialog): item + variants + suggested items.
+     * Suggested items: from item.suggestedItemIds; if empty, from category.suggestedCategoryIds (items from those categories).
+     * If a suggested item has variants, flatten to one entry per variant (id = variantId, itemId = item id).
+     */
+    getItemDetailForUser = async (
+        hotelId: string,
+        itemId: string,
+        hotelTimezone: string
+    ): Promise<ServiceResult<ItemDetailForCustomer>> => {
+        const item = await ItemModel.findOne({
+            _id: new Types.ObjectId(itemId),
+            hotelId: new Types.ObjectId(hotelId),
+            isActive: true,
+        })
+            .select("name description image price discountedPrice minVariantPrice hasVariants type availability categoryId suggestedItemIds")
+            .lean();
+        if (!item) {
+            return { success: false, message: "Item not found" };
+        }
+
+        const variants = await VariantModel.find({
+            itemId: new Types.ObjectId(itemId),
+            hotelId: new Types.ObjectId(hotelId),
+            isActive: true,
+        })
+            .sort({ sortOrder: 1 })
+            .select("name price discountedPrice")
+            .lean();
+
+        const itemAvailability = item.availability as IAvailability | undefined;
+        const itemIsAvailable = isItemAvailable(itemAvailability, hotelTimezone);
+
+        const variantList: ItemDetailVariant[] = variants.map((v) => ({
+            id: v._id.toString(),
+            name: v.name,
+            price: v.price,
+            discountedPrice: v.discountedPrice ?? undefined,
+            isAvailable: itemIsAvailable,
+        }));
+
+        let suggestedItemIds: Types.ObjectId[] = (item.suggestedItemIds as Types.ObjectId[] | undefined) ?? [];
+        if (suggestedItemIds.length === 0) {
+            const category = await CategoryModel.findOne({
+                _id: item.categoryId,
+                hotelId: new Types.ObjectId(hotelId),
+            })
+                .select("suggestedCategoryIds")
+                .lean();
+            const catIds = (category?.suggestedCategoryIds as Types.ObjectId[] | undefined) ?? [];
+            if (catIds.length > 0) {
+                const itemsFromCategories = await ItemModel.find({
+                    hotelId: new Types.ObjectId(hotelId),
+                    categoryId: { $in: catIds },
+                    isActive: true,
+                    _id: { $ne: new Types.ObjectId(itemId) },
+                })
+                    .select("_id")
+                    .limit(50)
+                    .lean();
+                suggestedItemIds = itemsFromCategories.map((i) => i._id);
+            }
+        }
+
+        const suggestedItemsFlat: ItemDetailSuggestedItem[] = [];
+        if (suggestedItemIds.length > 0) {
+            const suggestedItems = await ItemModel.find({
+                _id: { $in: suggestedItemIds },
+                hotelId: new Types.ObjectId(hotelId),
+                isActive: true,
+            })
+                .select("name price discountedPrice hasVariants type availability")
+                .lean();
+            const suggestedIds = suggestedItems.map((s) => s._id.toString());
+            const suggestedVariants = await VariantModel.find({
+                itemId: { $in: suggestedItemIds },
+                hotelId: new Types.ObjectId(hotelId),
+                isActive: true,
+            })
+                .sort({ sortOrder: 1 })
+                .select("itemId name price discountedPrice")
+                .lean();
+            const variantsByItemId = new Map<string, typeof suggestedVariants>();
+            for (const v of suggestedVariants) {
+                const key = v.itemId.toString();
+                if (!variantsByItemId.has(key)) variantsByItemId.set(key, []);
+                variantsByItemId.get(key)!.push(v);
+            }
+            for (const s of suggestedItems) {
+                const sid = s._id.toString();
+                const itemType = (s.type as "veg" | "non-veg" | "egg") ?? "veg";
+                const sAvailability = s.availability as IAvailability | undefined;
+                const sIsAvailable = isItemAvailable(sAvailability, hotelTimezone);
+                if (s.hasVariants) {
+                    const vList = variantsByItemId.get(sid) ?? [];
+                    for (const v of vList) {
+                        suggestedItemsFlat.push({
+                            id: v._id.toString(),
+                            itemId: sid,
+                            name: `${s.name} ${v.name}`.trim(),
+                            price: v.price,
+                            discountedPrice: v.discountedPrice ?? undefined,
+                            isAvailable: sIsAvailable,
+                            type: itemType,
+                        });
+                    }
+                } else {
+                    suggestedItemsFlat.push({
+                        id: sid,
+                        itemId: sid,
+                        name: s.name,
+                        price: s.price ?? 0,
+                        discountedPrice: s.discountedPrice ?? undefined,
+                        isAvailable: sIsAvailable,
+                        type: itemType,
+                    });
+                }
+            }
+        }
+
+        const imageIds = item.image ? [item.image.toString()] : [];
+        const urlMap = imageIds.length > 0 ? await attachmentService.getAttachmentUrlsByIds(imageIds) : {};
+        const imageUrl = item.image ? (urlMap[item.image.toString()] ?? null) : null;
+
+        const price = item.hasVariants ? (item.minVariantPrice ?? 0) : (item.price ?? 0);
+        const discountedPrice = item.discountedPrice ?? undefined;
+
+        return {
+            success: true,
+            data: {
+                id: item._id.toString(),
+                name: item.name,
+                price,
+                discountedPrice,
+                description: item.description ?? undefined,
+                image: imageUrl,
+                isAvailable: itemIsAvailable,
+                type: (item.type as "veg" | "non-veg" | "egg") ?? "veg",
+                variants: variantList,
+                suggestedItems: suggestedItemsFlat,
+            },
+        };
     };
 }
 

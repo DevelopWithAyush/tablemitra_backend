@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import { asyncHandler } from "../../utils/async-handler.js";
 import menuService from "./menu.service.js";
+import hospitalityService from "../hospitality/hospitality.service.js";
 import {
     CreateCategorySchema,
     UpdateCategorySchema,
@@ -8,6 +9,8 @@ import {
     UpdateItemSchema,
     PaginationSchema,
     GetFullMenuValidation,
+    GetUserMenuValidation,
+    GetItemDetailForUserValidation,
 } from "./validator/menu.validator.js";
 import { IJwtPayload } from "../auth/auth.types.js";
 import type { MenuAuditContext } from "./menu.types.js";
@@ -310,3 +313,83 @@ export const  getFullMenu = asyncHandler(async (req: Request, res: Response) => 
         data: result.data,
     });
 });
+
+// ==================== USER MENU (CUSTOMER-FACING) ====================
+
+/**
+ * Get menu for customer. hotelId from query or cookie customer_room_hotel_id.
+ * No staff permission required; used by customer app (e.g. after room scan).
+ */
+export const getMenuForUser = asyncHandler(async (req: Request, res: Response) => {
+    GetUserMenuValidation.parse({ query: req.query });
+    const hotelId =
+        (req.query.hotelId as string | undefined) ||
+        (req.cookies?.customer_room_hotel_id as string | undefined);
+    if (!hotelId) {
+        return res.status(400).json({
+            success: false,
+            message: "Hotel context required: provide hotelId query or customer_room_hotel_id cookie",
+        });
+    }
+
+    const tzResult = await hospitalityService.getHotelTimezone(hotelId);
+    if (!tzResult.success) {
+        return res.status(404).json({
+            success: false,
+            message: tzResult.message ?? "Hotel not found",
+        });
+    }
+
+    const menuResult = await menuService.getMenuForUser(hotelId, tzResult.data!);
+    if (!menuResult.success) {
+        return res.status(500).json({
+            success: false,
+            message: menuResult.message ?? "Failed to load menu",
+        });
+    }
+
+    return res.json({
+        success: true,
+        data: menuResult.data,
+    });
+});
+
+/**
+ * Item detail for customer (add-to-cart dialog). Protected; hotelId from query or cookie.
+ */
+export const getItemDetailForUser = asyncHandler(async (req: Request, res: Response) => {
+    GetItemDetailForUserValidation.parse({ params: req.params, query: req.query });
+    const itemId = req.params.itemId as string;
+    const hotelId =
+        (req.query.hotelId as string | undefined) ||
+        (req.cookies?.customer_room_hotel_id as string | undefined);
+    if (!hotelId) {
+        return res.status(400).json({
+            success: false,
+            message: "Hotel context required: provide hotelId query or customer_room_hotel_id cookie",
+        });
+    }
+
+    const tzResult = await hospitalityService.getHotelTimezone(hotelId);
+    if (!tzResult.success) {
+        return res.status(404).json({
+            success: false,
+            message: tzResult.message ?? "Hotel not found",
+        });
+    }
+
+    const result = await menuService.getItemDetailForUser(hotelId, itemId, tzResult.data!);
+    if (!result.success) {
+        return res.status(404).json({
+            success: false,
+            message: result.message ?? "Item not found",
+        });
+    }
+
+    return res.json({
+        success: true,
+        data: result.data,
+    });
+});
+
+

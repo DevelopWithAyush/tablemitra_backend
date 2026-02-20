@@ -1,4 +1,53 @@
 paths:
+  # ==================== USER SERVICE CATALOG (CUSTOMER-FACING) ====================
+  /api/v1/{app}/service/user-catalog:
+    get:
+      tags:
+        - Service - User Catalog
+      summary: Get service catalog for customer
+      description: |
+        Returns active service categories and items for the customer app (e.g. laundry, housekeeping).
+        - **Hotel**: from query `hotelId` or cookie `customer_room_hotel_id`.
+        - **Availability**: each item includes `availability` (days, startTime, endTime) and `isAvailable` (computed using hotel timezone).
+        - **Images**: category and item image URLs resolved. Protected (auth required).
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ServiceAppParam"
+        - name: hotelId
+          in: query
+          required: false
+          schema:
+            type: string
+            pattern: '^[0-9a-fA-F]{24}$'
+          description: Hotel ID (optional if cookie set)
+      responses:
+        "200":
+          description: Service catalog with categories and items (availability + isAvailable)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: "#/components/schemas/UserServiceResponse"
+        "400":
+          description: Hotel context required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+        "404":
+          description: Hotel not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+
   # ==================== CATEGORY ENDPOINTS ====================
   /api/v1/{app}/service/categories:
     get:
@@ -461,7 +510,7 @@ components:
       required: true
       schema:
         type: string
-        enum: [manager, frontdesk, room_service]
+        enum: [manager, customer, frontdesk, room_service]
       description: Application context (determines permissions)
 
     ServiceCategoryIdParam:
@@ -771,3 +820,54 @@ components:
         totalServices:
           type: integer
           example: 25
+
+    # ==================== USER SERVICE CATALOG (CUSTOMER-FACING) ====================
+    UserServiceItem:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+          example: "Shirt Wash"
+        price:
+          type: number
+          example: 100
+        discountedPrice:
+          type: number
+          nullable: true
+          example: 100
+        description:
+          type: string
+          nullable: true
+          example: "Wash and iron a shirt"
+        image:
+          type: string
+          nullable: true
+        availability:
+          $ref: "#/components/schemas/ServiceAvailability"
+        isAvailable:
+          type: boolean
+          example: true
+    UserServiceCategory:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+          example: "Laundry"
+        image:
+          type: string
+          nullable: true
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/UserServiceItem"
+    UserServiceResponse:
+      type: object
+      properties:
+        categories:
+          type: array
+          items:
+            $ref: "#/components/schemas/UserServiceCategory"

@@ -17,9 +17,15 @@ import {
     ICategoryWithServices,
     IFullServiceCatalog,
     ServiceAuditContext,
+    UserServiceResponse,
+    UserServiceCategory,
+    UserServiceItem,
+    IAvailability,
 } from "./service.types.js";
 import logger from "../../helpers/logger/index.js";
 import { publishAuditEvent } from "../audit/audit.publisher.js";
+import { isServiceAvailable } from "./availability.util.js";
+import attachmentService from "../attachments/attach.service.js";
 
 // ==================== CACHE CONFIGURATION ====================
 
@@ -29,9 +35,11 @@ const CACHE_KEYS = {
     SERVICES_LIST: (hotelId: string, categoryId: string) => `service:${hotelId}:categories:${categoryId}:services:list`,
     SERVICE_BY_ID: (hotelId: string, serviceId: string) => `service:${hotelId}:services:${serviceId}`,
     FULL_CATALOG: (hotelId: string) => `service:${hotelId}:full`,
+    USER_CATALOG: (hotelId: string) => `service:${hotelId}:user_catalog`,
 };
 
 const CACHE_TTL = 1800; // 30 minutes
+const USER_CATALOG_TTL = 300; // 5 minutes
 
 // ==================== HELPER FUNCTIONS ====================
 
@@ -715,6 +723,116 @@ class ServiceOptimizationService {
         await redis.setEx(cacheKey, CACHE_TTL, JSON.stringify(result));
 
         return { success: true, data: result };
+    };
+
+    // ==================== USER SERVICE CATALOG (CUSTOMER-FACING) ====================
+
+    /**
+     * Get service catalog for customer: active categories and items, with image URLs,
+     * availability object and isAvailable computed per request using hotel timezone.
+     * Raw catalog (without isAvailable) cached for 5 minutes.
+     */
+    getServiceCatalogForUser = async (
+        hotelId: string,
+        hotelTimezone: string
+    ): Promise<ServiceResult<UserServiceResponse>> => {
+        const redis = getRedis();
+        const cacheKey = CACHE_KEYS.USER_CATALOG(hotelId);
+
+        type RawItem = {
+            id: string;
+            name: string;
+            price: number;
+            discountedPrice?: number;
+            description?: string;
+            image: string | null;
+            availability: IAvailability;
+            isAvailable?: never;
+        };
+        type RawCategory = { id: string; name: string; image: string | null; items: RawItem[] };
+
+        let raw: { categories: RawCategory[] };
+        const cached = await redis.get(cacheKey);
+        if (cached) {
+            raw = JSON.parse(cached);
+        } else {
+            const categories = await ServiceCategoryModel.find({
+                hotelId: new Types.ObjectId(hotelId),
+                isActive: true,
+            })
+                .sort({ sortOrder: 1 })
+                .select("_id name image")
+                .lean();
+            if (categories.length === 0) {
+                return { success: true, data: { categories: [] } };
+            }
+            const categoryIds = categories.map((c) => c._id);
+            const items = await ServiceItemModel.find({
+                hotelId: new Types.ObjectId(hotelId),
+                categoryId: { $in: categoryIds },
+                isActive: true,
+            })
+                .sort({ sortOrder: 1 })
+                .select("categoryId name description price image availability")
+                .lean();
+            const itemImageIds = [...new Set(items.map((i) => i.image?.toString()).filter(Boolean) as string[])];
+            const categoryImageIds = [...new Set(categories.map((c) => (c as { image?: Types.ObjectId }).image?.toString()).filter(Boolean) as string[])];
+            const allImageIds = [...new Set([...itemImageIds, ...categoryImageIds])];
+            const urlMap = await attachmentService.getAttachmentUrlsByIds(allImageIds);
+            const itemMap = new Map<string, typeof items>();
+            for (const item of items) {
+                const cid = item.categoryId.toString();
+                if (!itemMap.has(cid)) itemMap.set(cid, []);
+                itemMap.get(cid)!.push(item);
+            }
+            raw = {
+                categories: categories.map((cat) => {
+                    const catItems = itemMap.get(cat._id.toString()) || [];
+                    const catImage = (cat as { image?: Types.ObjectId }).image;
+                    return {
+                        id: cat._id.toString(),
+                        name: cat.name,
+                        image: (catImage && urlMap[catImage.toString()]) || null,
+                        items: catItems.map((i) => {
+                            const av = (i.availability as IAvailability) ?? { days: [] };
+                            return {
+                                id: i._id.toString(),
+                                name: i.name,
+                                price: i.price ?? 0,
+                                discountedPrice: (i as { discountedPrice?: number }).discountedPrice ?? undefined,
+                                description: i.description ?? undefined,
+                                image: (i.image && urlMap[i.image.toString()]) || null,
+                                availability: {
+                                    days: av.days ?? [],
+                                    startTime: av.startTime,
+                                    endTime: av.endTime,
+                                },
+                            };
+                        }),
+                    };
+                }),
+            };
+            await redis.setEx(cacheKey, USER_CATALOG_TTL, JSON.stringify(raw));
+        }
+
+        const response: UserServiceResponse = {
+            categories: raw.categories.map((cat) => ({
+                id: cat.id,
+                name: cat.name,
+                image: cat.image ?? null,
+                items: cat.items.map((it) => ({
+                    id: it.id,
+                    name: it.name,
+                    price: it.price,
+                    discountedPrice: it.discountedPrice,
+                    description: it.description,
+                    image: it.image,
+                    availability: it.availability,
+                    isAvailable: isServiceAvailable(it.availability, hotelTimezone),
+                })) as UserServiceItem[],
+            })) as UserServiceCategory[],
+        };
+        return { success: true, data: response };
     };
 }
 

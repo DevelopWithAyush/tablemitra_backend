@@ -198,6 +198,19 @@ export const GetItemByIdValidation = z.object({
     params: ItemIdParam.passthrough(),
 });
 
+// User menu (customer-facing): hotelId optional (else from cookie customer_room_hotel_id)
+export const GetUserMenuValidation = z.object({
+    query: z.object({
+        hotelId: MongoIdField.optional(),
+    }),
+});
+
+// Item detail for customer (add-to-cart dialog): itemId in params, hotelId optional in query
+export const GetItemDetailForUserValidation = z.object({
+    params: z.object({ itemId: MongoIdField }),
+    query: z.object({ hotelId: MongoIdField.optional() }),
+});
+
 // Full menu – super search (search, categoryIds, price range, type, isPopular, activeOnly)
 const optionalBooleanQuery = z
     .union([z.literal("true"), z.literal("false"), z.boolean()])

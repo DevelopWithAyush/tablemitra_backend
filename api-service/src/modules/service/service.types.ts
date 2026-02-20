@@ -109,3 +109,27 @@ export interface ToggleResult {
     message?: string;
     isActive?: boolean;
 }
+
+// ==================== USER SERVICE CATALOG (CUSTOMER-FACING) ====================
+
+export interface UserServiceItem {
+    id: string;
+    name: string;
+    price: number;
+    discountedPrice?: number;
+    description?: string;
+    image: string | null;
+    availability: { days: number[]; startTime?: string; endTime?: string };
+    isAvailable: boolean;
+}
+
+export interface UserServiceCategory {
+    id: string;
+    name: string;
+    image: string | null;
+    items: UserServiceItem[];
+}
+
+export interface UserServiceResponse {
+    categories: UserServiceCategory[];
+}

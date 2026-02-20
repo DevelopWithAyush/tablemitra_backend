@@ -1,9 +1,63 @@
-# Customer-facing APIs (scan flow, room context). app must be "customer" for scan.
+# Customer-facing APIs (scan flow, room context, home). app must be "customer".
 tags:
   - name: Customer
     description: Customer scan and room context (ROOM QR flow)
 
 paths:
+  /api/v1/{app}/hospitality/home:
+    get:
+      tags:
+        - Customer
+      summary: Customer app home – hotel context
+      description: |
+        **Protected:** requires customer authentication (Bearer or cookie `accessToken_customer`).
+        **Only for app=customer.** Returns hotel context when the customer has scanned a room QR (cookies `customer_room_hotel_id`, `customer_room_room_number` set). If no hotel in cookies, returns `requiresScan: true` so the app can prompt the user to scan the room QR code.
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      parameters:
+        - name: app
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [customer]
+          description: Must be "customer"
+      responses:
+        "200":
+          description: Hotel context or prompt to scan QR
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/CustomerHomeRequiresScan"
+                  - $ref: "#/components/schemas/CustomerHomeWithContext"
+        "401":
+          description: Unauthorized (not logged in as customer)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: false
+                  message:
+                    type: string
+                    example: "Unauthorized"
+        "404":
+          description: app is not "customer" or hotel not found (invalid cookie)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: false
+                  message:
+                    type: string
+
   /api/v1/{app}/scan/{code}:
     get:
       tags:
@@ -56,3 +110,77 @@ paths:
                   message:
                     type: string
                     example: "Not found"
+
+components:
+  schemas:
+    CustomerHomeRequiresScan:
+      type: object
+      required: [success, requiresScan, message, data]
+      properties:
+        success:
+          type: boolean
+          example: true
+        requiresScan:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: "Please scan room QR code"
+        data:
+          type: "null"
+    CustomerHomeWithContext:
+      type: object
+      required: [success, requiresScan, data]
+      properties:
+        success:
+          type: boolean
+          example: true
+        requiresScan:
+          type: boolean
+          example: false
+        data:
+          $ref: "#/components/schemas/CustomerHotelContext"
+    CustomerHotelContext:
+      type: object
+      properties:
+        roomNumber:
+          type: string
+          example: "101"
+        name:
+          type: string
+          example: "Hotel 1"
+        logo:
+          type: string
+          nullable: true
+          example: "https://example.com/image.jpg"
+        address:
+          type: string
+          description: Full address as single line (e.g. Apollo Bunder, Mumbai, Maharashtra, India - 400001)
+          example: "Apollo Bunder, Mumbai, Maharashtra, India - 400001"
+        phone:
+          type: string
+          example: "1234567890"
+        currency:
+          type: string
+          example: "INR"
+        timezone:
+          type: string
+          example: "Asia/Kolkata"
+        taxSettings:
+          type: array
+          items:
+            type: object
+            properties:
+              taxRate:
+                type: number
+                example: 18
+              taxType:
+                type: string
+                enum: [GST, VAT, OTHER]
+                example: "GST"
+              taxCode:
+                type: string
+                example: "1234567890"
+              name:
+                type: string
+                example: "CGST"

@@ -1174,6 +1174,83 @@ class HospitalityService {
             data: { ...hotel, manager, staffCount },
         };
     };
+
+    /**
+     * Get hotel timezone for menu/availability calculations. Used by menu module (DDD).
+     */
+    getHotelTimezone = async (hotelId: string): Promise<ServiceResult<string>> => {
+        const hotel = await Hotel.findOne({ _id: hotelId, isDeleted: false })
+            .select("settings.timezone")
+            .lean();
+        if (!hotel) {
+            return { success: false, message: "Hotel not found" };
+        }
+        const timezone =
+            (hotel.settings as { timezone?: string } | undefined)?.timezone ?? "Asia/Kolkata";
+        return { success: true, message: "OK", data: timezone };
+    };
+
+    /**
+     * Minimal hotel context for customer app home (name, logo URL, address, phone, currency, timezone, taxSettings).
+     * Used when customer has already scanned room QR (hotelId from cookie).
+     */
+    getHotelContextForCustomer = async (
+        hotelId: string
+    ): Promise<ServiceResult<{
+        name: string;
+        logo: string | null;
+        address: string;
+        phone: string;
+        currency: string;
+        timezone: string;
+        taxSettings: Array<{ taxRate: number; taxType: string; taxCode?: string; name?: string }>;
+    }>> => {
+        const hotel = await Hotel.findOne({ _id: hotelId, isDeleted: false })
+            .select("name logo address contact settings.currency settings.timezone taxSettings")
+            .populate("logo", "url")
+            .lean();
+        if (!hotel) {
+            return { success: false, message: "Hotel not found" };
+        }
+        const s = hotel.settings as { currency?: string; timezone?: string } | undefined;
+        const addr = hotel.address as {
+            street?: string;
+            city: string;
+            state: string;
+            country: string;
+            pincode: string;
+        };
+        const contact = hotel.contact as { phone: string };
+        const logoObj = hotel.logo as { url?: string } | null;
+        const city = addr?.city ?? "";
+        const state = addr?.state ?? "";
+        const country = addr?.country ?? "India";
+        const pincode = addr?.pincode ?? "";
+        const street = addr?.street?.trim();
+        const addressParts = [street, city, state, country].filter(Boolean);
+        const addressLine = addressParts.length > 0
+            ? `${addressParts.join(", ")}${pincode ? ` - ${pincode}` : ""}`
+            : (pincode || "");
+        return {
+            success: true,
+            data: {
+                name: hotel.name,
+                logo: logoObj?.url ?? null,
+                address: addressLine,
+                phone: contact?.phone ?? "",
+                currency: s?.currency ?? "INR",
+                timezone: s?.timezone ?? "Asia/Kolkata",
+                taxSettings: Array.isArray(hotel.taxSettings)
+                    ? hotel.taxSettings.map((t: { taxRate: number; taxType: string; taxCode?: string | null; name?: string | null }) => ({
+                          taxRate: t.taxRate,
+                          taxType: t.taxType,
+                          taxCode: t.taxCode ?? undefined,
+                          name: t.name ?? undefined,
+                      }))
+                    : [],
+            },
+        };
+    };
 }
 
 export default new HospitalityService();

@@ -3,7 +3,7 @@ import { asyncHandler } from "../../utils/async-handler.js";
 import { IJwtPayload } from "../auth/auth.types.js";
 import hospitalityService from "./hospitality.service.js";
 import logger from "../../helpers/logger/index.js";
-import type { HospitalityAuditContext } from "./hospitality.types.js";
+import type { HospitalityAuditContext, CustomerHomeResponse } from "./hospitality.types.js";
 import type { ActorRole } from "../audit/audit.types.js";
 
 function getAuditContext(req: Request): HospitalityAuditContext {
@@ -461,6 +461,53 @@ class HospitalityController {
             message: "Guest checked in successfully",
             data: result.data,
         });
+    });
+
+    /**
+     * Customer app home: hotel context from room cookies.
+     * GET /api/v1/customer/hospitality/home (auth required). Only for app=customer.
+     * If no customer_room_hotel_id cookie → requiresScan: true (ask user to scan room QR).
+     */
+    getCustomerHomeContext = asyncHandler(async (req: Request, res: Response) => {
+        const app = req.params.app as string;
+        if (app !== "customer") {
+            return res.status(404).json({ success: false, message: "Not found" });
+        }
+
+        const hotelId = req.cookies?.customer_room_hotel_id as string | undefined;
+        const roomNumber = (req.cookies?.customer_room_room_number as string) ?? "";
+
+        if (!hotelId) {
+            const response: CustomerHomeResponse = {
+                requiresScan: true,
+                message: "Please scan room QR code",
+                data: null,
+            };
+            return res.status(200).json({ success: true, ...response });
+        }
+
+        const result = await hospitalityService.getHotelContextForCustomer(hotelId);
+        if (!result.success || !result.data) {
+            return res.status(404).json({
+                success: false,
+                message: result.message ?? "Hotel not found",
+            });
+        }
+
+        const response: CustomerHomeResponse = {
+            requiresScan: false,
+            data: {
+                roomNumber,
+                name: result.data.name,
+                logo: result.data.logo,
+                address: result.data.address,
+                phone: result.data.phone,
+                currency: result.data.currency,
+                timezone: result.data.timezone,
+                taxSettings: result.data.taxSettings,
+            },
+        };
+        return res.status(200).json({ success: true, ...response });
     });
 }
 

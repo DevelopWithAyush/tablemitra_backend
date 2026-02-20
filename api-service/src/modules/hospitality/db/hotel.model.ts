@@ -52,6 +52,12 @@ const hotelSchema = new mongoose.Schema({
             default: "FRONTDESK",
         },
     },
+    taxSettings: [{
+        taxRate: { type: Number, required: true, min: 0 },
+        taxType: { type: String, enum: ["GST", "VAT", "OTHER"], default: "GST" },
+        taxCode: { type: String },
+        name: { type: String }, // e.g. "CGST", "SGST", "Service Tax"
+    }],
     totalRooms: {
         type: Number,
         default: 0,
@@ -95,3 +101,5 @@ hotelSchema.index({ name: "text", "address.city": "text" });
 
 const Hotel = mongoose.model("Hotel", hotelSchema);
 export default Hotel;
+
+

@@ -210,3 +210,21 @@ export interface ChainMemberListItem {
     joinedAt: Date;
     isActive: boolean;
 }
+
+// ==================== Customer app home (hotel context from room cookies) ====================
+
+export interface HotelContextForCustomer {
+    roomNumber: string;
+    name: string;
+    logo: string | null;
+    /** Full address as single-line string (e.g. "Apollo Bunder, Mumbai, Maharashtra, India - 400001") */
+    address: string;
+    phone: string;
+    currency: string;
+    timezone: string;
+    taxSettings: Array<{ taxRate: number; taxType: string; taxCode?: string; name?: string }>;
+}
+
+export type CustomerHomeResponse =
+    | { requiresScan: true; message: string; data: null }
+    | { requiresScan: false; data: HotelContextForCustomer };

@@ -1,12 +1,14 @@
 import { Request, Response } from "express";
 import { asyncHandler } from "../../utils/async-handler.js";
 import serviceOptimizationService from "./service.service.js";
+import hospitalityService from "../hospitality/hospitality.service.js";
 import {
     CreateCategorySchema,
     UpdateCategorySchema,
     CreateServiceSchema,
     UpdateServiceSchema,
     PaginationSchema,
+    GetUserServiceCatalogValidation,
 } from "./validator/service.validator.js";
 import { IJwtPayload } from "../auth/auth.types.js";
 import type { ServiceAuditContext } from "./service.types.js";
@@ -253,6 +255,46 @@ export const getFullCatalog = asyncHandler(async (req: Request, res: Response) =
         return res.status(500).json({
             success: false,
             message: result.message,
+        });
+    }
+
+    return res.json({
+        success: true,
+        data: result.data,
+    });
+});
+
+// ==================== USER SERVICE CATALOG (CUSTOMER-FACING) ====================
+
+/**
+ * Get service catalog for customer. hotelId from query or cookie customer_room_hotel_id.
+ * Protected; returns categories with items, availability object and isAvailable per item.
+ */
+export const getServiceCatalogForUser = asyncHandler(async (req: Request, res: Response) => {
+    GetUserServiceCatalogValidation.parse({ query: req.query });
+    const hotelId =
+        (req.query.hotelId as string | undefined) ||
+        (req.cookies?.customer_room_hotel_id as string | undefined);
+    if (!hotelId) {
+        return res.status(400).json({
+            success: false,
+            message: "Hotel context required: provide hotelId query or customer_room_hotel_id cookie",
+        });
+    }
+
+    const tzResult = await hospitalityService.getHotelTimezone(hotelId);
+    if (!tzResult.success) {
+        return res.status(404).json({
+            success: false,
+            message: tzResult.message ?? "Hotel not found",
+        });
+    }
+
+    const result = await serviceOptimizationService.getServiceCatalogForUser(hotelId, tzResult.data!);
+    if (!result.success) {
+        return res.status(500).json({
+            success: false,
+            message: result.message ?? "Failed to load catalog",
         });
     }
 

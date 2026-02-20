@@ -22,6 +22,10 @@ const hospitalityRoutes = Router({ mergeParams: true });
 // Auth middleware - uses req.params.app
 hospitalityRoutes.use(authMiddleware);
 
+// ==================== Customer app home (hotel context from room cookies) ====================
+// Only for app=customer; returns requiresScan if no room scanned. No staff permission.
+hospitalityRoutes.get("/home", hospitalityController.getCustomerHomeContext);
+
 // ==================== Chain Routes ====================
 
 // Sales: Onboard chain with founder
@@ -138,6 +142,8 @@ hospitalityRoutes.post(
     requirePermissions(["CHECK_IN_GUEST", "VIEW_HOTEL"], "any", true),
     validate(CheckInGuestSchema),
     hospitalityController.checkInGuest
-);
+); 
+
+
 
 export default hospitalityRoutes;

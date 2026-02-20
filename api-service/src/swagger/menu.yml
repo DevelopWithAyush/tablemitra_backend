@@ -1,4 +1,104 @@
 paths:
+  # ==================== USER MENU (CUSTOMER-FACING) ====================
+  /api/v1/{app}/menu/user-menu:
+    get:
+      tags:
+        - Menu - User Menu
+      summary: Get menu for customer
+      description: |
+        Returns a lightweight menu for listing: active categories and item summaries.
+        - **Hotel context**: Pass `hotelId` in query, or (for customer app) rely on cookie `customer_room_hotel_id` set after room scan. If neither is present, returns 400.
+        - **Availability**: `isAvailable` is computed per request using the hotel timezone (items with no availability are always available).
+        - **Variant items**: Expose min price only.
+        - **Image**: Single image URL per item.
+        - **Type**: veg | non-veg | egg per item.
+        Protected (auth required).
+      parameters:
+        - $ref: "#/components/parameters/AppParam"
+        - name: hotelId
+          in: query
+          required: false
+          schema:
+            type: string
+            pattern: '^[0-9a-fA-F]{24}$'
+          description: Hotel ID (optional if cookie customer_room_hotel_id is set)
+      responses:
+        "200":
+          description: User menu (categories and items with isAvailable, single image URL, min price for variants)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: "#/components/schemas/UserMenuResponse"
+        "400":
+          description: Bad request - Hotel context required (provide hotelId or customer_room_hotel_id cookie)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MenuError"
+        "404":
+          description: Hotel not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MenuError"
+
+  # Item detail for customer (add-to-cart dialog); protected
+  /api/v1/{app}/menu/items/{itemId}/detail:
+    get:
+      tags:
+        - Menu - User Menu
+      summary: Get item detail for customer (add-to-cart dialog)
+      description: |
+        Returns item with variants and suggested add-ons for the dialog when user clicks an item.
+        - **Hotel**: from query `hotelId` or cookie `customer_room_hotel_id`.
+        - **Variants**: list of size/option with price; empty if item has no variants.
+        - **Suggested items**: from item's suggestedItemIds; if empty, from category's suggestedCategoryIds (items from those categories). If a suggested item has variants, each variant is returned as a separate entry (id = variantId, itemId = parent item id).
+        Protected (auth required).
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/AppParam"
+        - $ref: "#/components/parameters/ItemIdParam"
+        - name: hotelId
+          in: query
+          required: false
+          schema:
+            type: string
+            pattern: '^[0-9a-fA-F]{24}$'
+          description: Hotel ID (optional if cookie set)
+      responses:
+        "200":
+          description: Item detail with variants and suggested items
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: "#/components/schemas/ItemDetailForCustomer"
+        "400":
+          description: Hotel context required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MenuError"
+        "404":
+          description: Item or hotel not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MenuError"
+
   # ==================== CATEGORY ENDPOINTS ====================
   /api/v1/{app}/menu/categories:
     get:
@@ -1128,3 +1228,139 @@ components:
         totalItems:
           type: integer
           example: 50
+
+    # ==================== USER MENU SCHEMAS ====================
+    UserMenuItem:
+      type: object
+      properties:
+        id:
+          type: string
+          example: "507f1f77bcf86cd799439011"
+        name:
+          type: string
+          example: "Paneer Tikka"
+        price:
+          type: number
+          example: 320
+        discountedPrice:
+          type: number
+          nullable: true
+          example: 280
+        description:
+          type: string
+          nullable: true
+        image:
+          type: string
+          nullable: true
+          description: Single image URL
+        isAvailable:
+          type: boolean
+          example: true
+        hasVariants:
+          type: boolean
+          example: true
+        type:
+          type: string
+          enum: [veg, non-veg, egg]
+          example: "veg"
+    UserMenuCategory:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+          example: "Burger"
+        image:
+          type: string
+          nullable: true
+          description: Category image URL
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/UserMenuItem"
+    UserMenuResponse:
+      type: object
+      properties:
+        categories:
+          type: array
+          items:
+            $ref: "#/components/schemas/UserMenuCategory"
+
+    # ==================== ITEM DETAIL FOR CUSTOMER ====================
+    ItemDetailVariant:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+          example: "Half"
+        price:
+          type: number
+          example: 100
+        discountedPrice:
+          type: number
+          nullable: true
+          example: 80
+        isAvailable:
+          type: boolean
+          example: true
+    ItemDetailSuggestedItem:
+      type: object
+      description: "One entry per suggested item; if item has variants, one entry per variant (id = variantId, itemId = parent). name = full display string e.g. 'Chicken Biryani Half'."
+      properties:
+        id:
+          type: string
+          description: variantId when item has variants, else itemId
+        itemId:
+          type: string
+          description: parent item id (for cart)
+        name:
+          type: string
+          description: full display name (e.g. Chicken Biryani Half for variant, or item name when no variants)
+          example: "Chicken Biryani Half"
+        price:
+          type: number
+        discountedPrice:
+          type: number
+          nullable: true
+        isAvailable:
+          type: boolean
+        type:
+          type: string
+          enum: [veg, non-veg, egg]
+    ItemDetailForCustomer:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+          example: "Chicken Burger"
+        price:
+          type: number
+          example: 120
+        discountedPrice:
+          type: number
+          nullable: true
+          example: 100
+        description:
+          type: string
+          nullable: true
+        image:
+          type: string
+          nullable: true
+        isAvailable:
+          type: boolean
+        type:
+          type: string
+          enum: [veg, non-veg, egg]
+        variants:
+          type: array
+          items:
+            $ref: "#/components/schemas/ItemDetailVariant"
+        suggestedItems:
+          type: array
+          items:
+            $ref: "#/components/schemas/ItemDetailSuggestedItem"

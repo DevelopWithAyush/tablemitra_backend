@@ -173,3 +173,63 @@ export interface VariantPriceRange {
     minVariantPrice: number;
     maxVariantPrice: number;
 }
+
+// ==================== USER MENU (CUSTOMER-FACING) ====================
+
+export interface UserMenuItem {
+    id: string;
+    name: string;
+    price: number;
+    discountedPrice?: number;
+    description?: string;
+    image: string | null;
+    isAvailable: boolean;
+    hasVariants: boolean;
+    type: "veg" | "non-veg" | "egg";
+}
+
+export interface UserMenuCategory {
+    id: string;
+    name: string;
+    image: string | null;
+    items: UserMenuItem[];
+}
+
+export interface UserMenuResponse {
+    categories: UserMenuCategory[];
+}
+
+// ==================== ITEM DETAIL FOR CUSTOMER (ADD-TO-CART DIALOG) ====================
+
+export interface ItemDetailVariant {
+    id: string;
+    name: string;
+    price: number;
+    discountedPrice?: number;
+    isAvailable: boolean;
+}
+
+/** Suggested add-on: either full item (no variants) or one entry per variant (flattened). */
+export interface ItemDetailSuggestedItem {
+    id: string;       // variantId when item has variants, else itemId
+    itemId: string;   // parent item id (for cart)
+    /** Full display name: e.g. "Chicken Biryani Half" (item + variant) or item name when no variants */
+    name: string;
+    price: number;
+    discountedPrice?: number;
+    isAvailable: boolean;
+    type: "veg" | "non-veg" | "egg";
+}
+
+export interface ItemDetailForCustomer {
+    id: string;
+    name: string;
+    price: number;
+    discountedPrice?: number;
+    description?: string;
+    image: string | null;
+    isAvailable: boolean;
+    type: "veg" | "non-veg" | "egg";
+    variants: ItemDetailVariant[];
+    suggestedItems: ItemDetailSuggestedItem[];
+}

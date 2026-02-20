@@ -6,9 +6,8 @@ import authService from "../auth/auth.service.js";
 import hospitalityService from "../hospitality/hospitality.service.js";
 import { qrCodeService } from "../qr-code/qr-code.service.js";
 import logger from "../../helpers/logger/index.js";
-
-const CUSTOMER_ROOM_CONTEXT_MAX_AGE = 24 * 60 * 60 * 1000; // 24h
-const COOKIE_OPTS = { httpOnly: true, secure: true, sameSite: "none" as const, maxAge: CUSTOMER_ROOM_CONTEXT_MAX_AGE };
+/** Session cookies: no maxAge/expires so they are cleared when the user closes the browser. */
+const COOKIE_OPTS = { httpOnly: true, secure: true, sameSite: "none" as const };
 
 /**
  * Customer scan flow (ROOM only). GET /api/v1/customer/scan/:code
@@ -63,23 +62,18 @@ export const handleCustomerScan = asyncHandler(async (req: Request, res: Respons
     }
 
     if (!userId) {
-        const scanToken = await authService.createScanToken({ hotelId, roomNumber }); 
-        const redirectUrl = new URL(loginUrl);
-        redirectUrl.searchParams.set("scanToken", scanToken);
-        return res.redirect(302, redirectUrl.toString());
+        const scanToken = await authService.createScanToken({ hotelId, roomNumber });
+        return res.redirect(302, `${loginUrl}?scanToken=${scanToken}`);
     }
 
     const roomResult = await hospitalityService.attachCustomerToRoomSession(hotelId, roomNumber, userId);
     if (!roomResult.success || !roomResult.data) {
-        const redirectUrl = new URL(appUrl);
-        redirectUrl.searchParams.set("error", "room_attach_failed");
-        return res.redirect(302, redirectUrl.toString());
+        return res.redirect(302, `${appUrl}?error=room_attach_failed`);
     }
 
     res.cookie("customer_room_hotel_id", roomResult.data.hotelId, COOKIE_OPTS);
     res.cookie("customer_room_room_number", roomResult.data.roomNumber, COOKIE_OPTS);
     res.cookie("customer_room_session_id", roomResult.data.roomSessionId, COOKIE_OPTS);
 
-    const redirectUrl = new URL(appUrl);
-    return res.redirect(302, redirectUrl.toString());
+    return res.redirect(302, appUrl);
 });

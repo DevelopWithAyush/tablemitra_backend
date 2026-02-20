@@ -9,7 +9,9 @@ import {
     getCategories,
     getFullMenu,
     getItemDetail,
+    getItemDetailForUser,
     getItems,
+    getMenuForUser,
     getVariants,
     toggleCategory,
     toggleItem,
@@ -22,7 +24,9 @@ import {
     GetCategoriesValidation,
     GetFullMenuValidation,
     GetItemByIdValidation,
+    GetItemDetailForUserValidation,
     GetItemsValidation,
+    GetUserMenuValidation,
     GetVariantsValidation,
     ToggleCategoryValidation,
     ToggleItemValidation,
@@ -32,10 +36,14 @@ import {
 
 const menuRoutes = Router({ mergeParams: true });
 
+
 // Auth middleware - uses req.params.app
 menuRoutes.use(authMiddleware);
 
-// ==================== CATEGORY ROUTES ====================
+menuRoutes.get("/user-menu", validate(GetUserMenuValidation), getMenuForUser);
+
+// Item detail for customer (add-to-cart dialog); protected, hotel from query or cookie
+menuRoutes.get("/items/:itemId/detail", validate(GetItemDetailForUserValidation), getItemDetailForUser);
 
 // Get all categories (paginated)
 menuRoutes.get(
