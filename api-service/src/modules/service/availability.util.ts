@@ -1,6 +1,38 @@
 import moment from "moment-timezone";
 import type { IAvailability } from "./service.types.js";
 
+const DAY_NAMES = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"] as const;
+
+/**
+ * Convert "HH:mm" (24h) to "h:mm am/pm" for API response (e.g. "09:00" -> "9:00 am", "18:00" -> "6:00 pm").
+ */
+export function formatTime12h(time: string): string {
+    const [hStr, mStr] = time.split(":");
+    const h = parseInt(hStr ?? "0", 10);
+    const m = parseInt(mStr ?? "0", 10);
+    const period = h < 12 ? "am" : "pm";
+    const hour12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
+    const min = m.toString().padStart(2, "0");
+    return `${hour12}:${min} ${period}`;
+}
+
+/**
+ * Format availability from DB shape for API response: days as ["sun","mon",...], times as "9:00 am" / "6:00 pm".
+ */
+export function formatAvailabilityForResponse(av: IAvailability | undefined | null): {
+    days: string[];
+    startTime?: string;
+    endTime?: string;
+} {
+    if (!av) return { days: [] };
+    const days = (av.days ?? []).map((d) => DAY_NAMES[d] ?? String(d));
+    return {
+        days,
+        startTime: av.startTime ? formatTime12h(av.startTime) : undefined,
+        endTime: av.endTime ? formatTime12h(av.endTime) : undefined,
+    };
+}
+
 /**
  * Convert "HH:mm" string to minutes since midnight.
  */

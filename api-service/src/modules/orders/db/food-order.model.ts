@@ -1,164 +1,101 @@
-import mongoose from "mongoose";
+import { Schema, model, Types } from "mongoose";
 
-const foodOrderItemSchema = new mongoose.Schema({
-    menuItemId: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "MenuItem",
+const FoodOrderItemSchema = new Schema({
+    itemId: {
+        type: Types.ObjectId,
+        ref: "Item",
         required: true,
     },
-    name: {
+    itemName: {
         type: String,
         required: true,
-    },
-    quantity: {
-        type: Number,
-        required: true,
-        min: 1,
     },
     price: {
         type: Number,
         required: true,
     },
-    totalPrice: {
+    discountedPrice: {
+        type: Number,
+    },
+    quantity: {
         type: Number,
         required: true,
     },
-    modifiers: [{
-        type: String,
-    }],
-    courseType: {
-        type: String,
-        enum: ["STARTER", "MAIN", "DESSERT", "BEVERAGE", "SIDE"],
+    variantId: {
+        type: Types.ObjectId,
+        ref: "Variant",
     },
-    specialInstructions: {
+    variantName: {
         type: String,
     },
-}, { _id: true });
+    isUpsell: {
+        type: Boolean,
+        required: true,
+        default: false,
+    },
+}, { _id: false });
 
-const foodOrderSchema = new mongoose.Schema({
-    orderNumber: {
-        type: String,
-        required: true,
-    },
-    guestSessionId: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "GuestSession",
-        required: true,
-    },
-    customerId: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "User",
-        required: true,
-    },
+const FoodOrderSchema = new Schema({
     hotelId: {
-        type: mongoose.Schema.Types.ObjectId,
+        type: Types.ObjectId,
         ref: "Hotel",
         required: true,
     },
-    locationType: {
-        type: String,
-        enum: ["ROOM", "TABLE", "POOL", "SPA", "LOBBY", "OTHER"],
+    customerId: {
+        type: Types.ObjectId,
+        ref: "User",
         required: true,
     },
-    locationIdentifier: {
+    roomSessionId: {
+        type: Types.ObjectId,
+        ref: "RoomSession",
+        required: true,
+    },
+    roomNumber: {
         type: String,
         required: true,
     },
-    items: [foodOrderItemSchema],
     status: {
         type: String,
-        enum: ["PENDING", "ACCEPTED", "PREPARING", "READY", "SERVED", "REJECTED", "CANCELLED"],
+        enum: ["PENDING", "PREPARING", "SERVED", "REJECTED"],
         default: "PENDING",
     },
-    assignedPanel: {
-        type: String,
-        enum: ["KITCHEN", "FRONTDESK", "ROOM_SERVICE"],
-        default: "KITCHEN",
+    items: [FoodOrderItemSchema],
+    bill: {
+        subtotal: {
+            type: Number,
+            required: true,
+        },
+        serviceCharge: {
+            type: Number,
+            required: true,
+        },
+        gstAndOther: {
+            type: Number,
+            required: true,
+        },
+        toPay: {
+            type: Number,
+            required: true,
+        },
     },
-    estimatedPrepTime: {
-        type: Number,
-    },
-    acceptedAt: {
-        type: Date,
-    },
-    acceptedBy: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "User",
-    },
-    preparingAt: {
-        type: Date,
-    },
-    readyAt: {
-        type: Date,
-    },
-    servedAt: {
-        type: Date,
-    },
-    servedBy: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "User",
-    },
-    rejectedAt: {
-        type: Date,
-    },
-    rejectedBy: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "User",
-    },
-    rejectionReason: {
-        type: String,
-    },
-    cancelledAt: {
-        type: Date,
-    },
-    cancelledBy: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "User",
-    },
-    cancellationReason: {
-        type: String,
-    },
-    subtotal: {
+    count: {
         type: Number,
         required: true,
-    },
-    tax: {
-        type: Number,
-        default: 0,
-    },
-    discount: {
-        type: Number,
-        default: 0,
-    },
-    totalAmount: {
-        type: Number,
-        required: true,
-    },
-    specialInstructions: {
-        type: String,
-    },
-    paymentStatus: {
-        type: String,
-        enum: ["PENDING", "PAID", "REFUNDED"],
-        default: "PENDING",
-    },
-    paymentMethod: {
-        type: String,
-        enum: ["CASH", "CARD", "UPI", "ROOM_CHARGE", "WALLET"],
-    },
-    paidAt: {
-        type: Date,
     },
 }, { timestamps: true });
 
-foodOrderSchema.index({ hotelId: 1, status: 1 });
-foodOrderSchema.index({ hotelId: 1, assignedPanel: 1, status: 1 });
-foodOrderSchema.index({ guestSessionId: 1 });
-foodOrderSchema.index({ customerId: 1 });
-foodOrderSchema.index({ hotelId: 1, locationIdentifier: 1, status: 1 });
-foodOrderSchema.index({ orderNumber: 1 }, { unique: true });
-foodOrderSchema.index({ createdAt: -1 });
-foodOrderSchema.index({ hotelId: 1, createdAt: -1 });
+// Indexes for efficient querying
+FoodOrderSchema.index({ hotelId: 1 });
+FoodOrderSchema.index({ customerId: 1 });
+FoodOrderSchema.index({ roomSessionId: 1 });
+FoodOrderSchema.index({ status: 1 });
+FoodOrderSchema.index({ createdAt: -1 });
+FoodOrderSchema.index({ hotelId: 1, status: 1 });
+FoodOrderSchema.index({ hotelId: 1, createdAt: -1 });
+FoodOrderSchema.index({ customerId: 1, createdAt: -1 });
+FoodOrderSchema.index({ roomSessionId: 1, createdAt: -1 });
 
-const FoodOrder = mongoose.model("FoodOrder", foodOrderSchema);
-export default FoodOrder;
+const FoodOrderModel = model("FoodOrder", FoodOrderSchema);
+
+export default FoodOrderModel;

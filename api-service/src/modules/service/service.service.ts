@@ -24,7 +24,7 @@ import {
 } from "./service.types.js";
 import logger from "../../helpers/logger/index.js";
 import { publishAuditEvent } from "../audit/audit.publisher.js";
-import { isServiceAvailable } from "./availability.util.js";
+import { isServiceAvailable, formatAvailabilityForResponse } from "./availability.util.js";
 import attachmentService from "../attachments/attach.service.js";
 
 // ==================== CACHE CONFIGURATION ====================
@@ -827,7 +827,7 @@ class ServiceOptimizationService {
                     discountedPrice: it.discountedPrice,
                     description: it.description,
                     image: it.image,
-                    availability: it.availability,
+                    availability: formatAvailabilityForResponse(it.availability),
                     isAvailable: isServiceAvailable(it.availability, hotelTimezone),
                 })) as UserServiceItem[],
             })) as UserServiceCategory[],

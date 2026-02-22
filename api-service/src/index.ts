@@ -30,7 +30,13 @@ initAWS();
 startAttachmentCleanupJob();
 
 app.use(cors({
-    origin: ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:3002', 'http://localhost:3003', 'http://localhost:3004', 'https://admin.tablemitra.com', 'https://tablemitra.com'],
+    origin: [
+        process.env.CUSTOMER_LOGIN_URL,
+        process.env.MANAGER_APP_URL,
+        process.env.FRONTDESK_APP_URL,
+        process.env.KITCHEN_APP_URL,
+        process.env.ROOM_SERVICE_APP_URL,
+    ].filter((url): url is string => Boolean(url)),
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
     exposedHeaders: ['Content-Disposition'],

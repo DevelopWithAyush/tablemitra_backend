@@ -68,6 +68,45 @@ const options: swaggerJsdoc.Options = {
                         totalPages: { type: "integer", example: 5 },
                     },
                 },
+                UpdateCustomerProfileInput: {
+                    type: "object",
+                    description: "All fields optional; only provided fields are updated",
+                    properties: {
+                        name: { type: "string", minLength: 1, maxLength: 100, example: "John Doe" },
+                        email: { type: "string", format: "email", maxLength: 255, example: "john@example.com" },
+                        foodPreferences: {
+                            type: "array",
+                            items: { type: "string", maxLength: 50 },
+                            maxItems: 20,
+                            example: ["veg", "no-onion"],
+                        },
+                        profilePicture: {
+                            type: "string",
+                            nullable: true,
+                            pattern: "^[0-9a-fA-F]{24}$",
+                            description: "Attachment ID (MongoDB ObjectId) or null to clear",
+                        },
+                    },
+                },
+                CustomerProfile: {
+                    type: "object",
+                    description: "Customer profile (response after update or GET /me for customer)",
+                    properties: {
+                        _id: { type: "string", example: "507f1f77bcf86cd799439011" },
+                        userId: { type: "string" },
+                        name: { type: "string", nullable: true },
+                        email: { type: "string", nullable: true },
+                        foodPreferences: { type: "array", items: { type: "string" }, nullable: true },
+                        profilePicture: {
+                            type: "object",
+                            nullable: true,
+                            properties: { _id: { type: "string" }, url: { type: "string" }, type: { type: "string" } },
+                        },
+                        isActive: { type: "boolean" },
+                        createdAt: { type: "string", format: "date-time" },
+                        updatedAt: { type: "string", format: "date-time" },
+                    },
+                },
             },
             securitySchemes: {
                 BearerAuth: {

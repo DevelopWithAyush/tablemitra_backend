@@ -112,6 +112,13 @@ export interface ToggleResult {
 
 // ==================== USER SERVICE CATALOG (CUSTOMER-FACING) ====================
 
+/** Availability in response: days as day names, times in 12h am/pm. */
+export interface UserServiceItemAvailability {
+    days: string[];       // e.g. ["sun", "mon", "tue"]
+    startTime?: string;  // e.g. "9:00 am"
+    endTime?: string;    // e.g. "6:00 pm"
+}
+
 export interface UserServiceItem {
     id: string;
     name: string;
@@ -119,7 +126,7 @@ export interface UserServiceItem {
     discountedPrice?: number;
     description?: string;
     image: string | null;
-    availability: { days: number[]; startTime?: string; endTime?: string };
+    availability: UserServiceItemAvailability;
     isAvailable: boolean;
 }
 

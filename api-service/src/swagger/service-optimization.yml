@@ -510,7 +510,7 @@ components:
       required: true
       schema:
         type: string
-        enum: [manager, customer, frontdesk, room_service]
+        enum: [manager, frontdesk, customer, room_service]
       description: Application context (determines permissions)
 
     ServiceCategoryIdParam:
@@ -845,7 +845,21 @@ components:
           type: string
           nullable: true
         availability:
-          $ref: "#/components/schemas/ServiceAvailability"
+          type: object
+          description: Display format; days as names (sun, mon, ...), times as 12h (e.g. 9:00 am, 6:00 pm)
+          properties:
+            days:
+              type: array
+              items:
+                type: string
+                enum: [sun, mon, tue, wed, thu, fri, sat]
+              example: ["sun", "mon", "tue"]
+            startTime:
+              type: string
+              example: "9:00 am"
+            endTime:
+              type: string
+              example: "6:00 pm"
         isAvailable:
           type: boolean
           example: true

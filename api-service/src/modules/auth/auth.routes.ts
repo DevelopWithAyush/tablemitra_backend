@@ -1,7 +1,7 @@
 import { Router } from "express";
 import authController from "./auth.controller.js";
 import { validate } from "../../middleware/validate.middleware.js";
-import { SendOtpSchema, VerifyOtpSchema, SwitchChainSchema } from "./validator/auth.validator.js";
+import { SendOtpSchema, VerifyOtpSchema, SwitchChainSchema, UpdateCustomerProfileSchema } from "./validator/auth.validator.js";
 import { authMiddleware } from "../../middleware/auth.middleware.js";
 
 // mergeParams: true to inherit :app from parent route
@@ -19,6 +19,9 @@ authRoutes.post("/logout", authController.logout);
 
 // Founder-specific routes for chain context
 authRoutes.get("/chains", authController.getChains);
-authRoutes.post("/switch-chain", validate(SwitchChainSchema), authController.switchChain);
+authRoutes.post("/switch-chain", validate(SwitchChainSchema), authController.switchChain);   
+
+
+authRoutes.put("/update-customer-profile", validate(UpdateCustomerProfileSchema), authController.updateCustomerProfile);
 
 export default authRoutes;

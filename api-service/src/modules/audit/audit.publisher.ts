@@ -42,7 +42,7 @@ export const publishAuditEvent = async (
         metadata?: Record<string, unknown>;
     }
 ): Promise<void> => {
-    try {
+    try { 
         await setupQueue();
 
         const channel = getRabbitChannel();

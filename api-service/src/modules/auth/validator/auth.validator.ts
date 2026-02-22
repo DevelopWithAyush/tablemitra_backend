@@ -20,6 +20,17 @@ export const SwitchChainSchema = z.object({
     }),
 });
 
+const mongoIdRegex = /^[0-9a-fA-F]{24}$/;
+
+export const UpdateCustomerProfileSchema = z.object({
+    body: z.object({
+        name: z.string().min(1).max(100).trim().optional(),
+        email: z.string().email("Invalid email").max(255).optional(),
+        foodPreferences: z.array(z.string().max(50)).max(20).optional(),
+        profilePicture: z.string().regex(mongoIdRegex, "Invalid attachment ID").optional().nullable(),
+    }),
+});
+
 // DTO types with app param
 export interface SendOtpDTO {
     body: { phone: string };
@@ -35,3 +46,5 @@ export interface SwitchChainDTO {
     body: { chainId: string };
     params: { app: string };
 }
+
+export type UpdateCustomerProfileDTO = z.infer<typeof UpdateCustomerProfileSchema>["body"];

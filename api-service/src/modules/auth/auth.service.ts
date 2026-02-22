@@ -477,6 +477,32 @@ class AuthService {
         };
     };
 
+    /**
+     * Update customer profile (name, email, foodPreferences, profilePicture). Only for customers.
+     */
+    updateCustomerProfile = async (
+        userId: string,
+        dto: { name?: string; email?: string; foodPreferences?: string[]; profilePicture?: string | null }
+    ): Promise<{ success: boolean; message?: string; profile?: Record<string, unknown> }> => {
+        const customer = await Customer.findOne({ userId });
+        if (!customer) {
+            return { success: false, message: "Customer profile not found" };
+        }
+        if (dto.name !== undefined) customer.name = dto.name;
+        if (dto.email !== undefined) customer.email = dto.email;
+        if (dto.foodPreferences !== undefined) customer.foodPreferences = dto.foodPreferences;
+        if (dto.profilePicture !== undefined) {
+            const { Types } = await import("mongoose");
+            customer.profilePicture = dto.profilePicture ? (new Types.ObjectId(dto.profilePicture) as any) : undefined;
+        }
+        await customer.save();
+        const updated = await Customer.findOne({ userId })
+            .select("-__v")
+            .populate("profilePicture", "url type")
+            .lean();
+        return { success: true, profile: updated as Record<string, unknown> };
+    };
+
     logout = async (userId: string, roleId: string, app: string): Promise<{ success: boolean; message: string; unauthorized?: boolean; roleKey?: string }> => {
         const expectedRoleKey = APP_ROLE_MAP[app];
         if (!expectedRoleKey) {

@@ -5,6 +5,7 @@ import authService from "./auth.service.js";
 import logger from "../../helpers/logger/index.js";
 import { publishAuditEvent } from "../audit/audit.publisher.js";
 import type { ActorRole } from "../audit/audit.types.js";
+import { UpdateCustomerProfileSchema } from "./validator/auth.validator.js";
 
 class AuthController {
     sendOtp = asyncHandler(async (req: Request, res: Response) => {
@@ -281,6 +282,43 @@ class AuthController {
             success: true,
             message: "Chain context switched successfully",
             data: { accessToken },
+        });
+    });
+
+    /**
+     * Update customer profile (name, email, foodPreferences, profilePicture). Only for app=customer.
+     */
+    updateCustomerProfile = asyncHandler(async (req: Request, res: Response) => {
+        const user = (req as any).user as IJwtPayload;
+        const app = req.params.app as string;
+
+        if (app !== "customer") {
+            return res.status(400).json({
+                success: false,
+                message: "This endpoint is only available for customers",
+            });
+        }
+
+        const { body: dto } = UpdateCustomerProfileSchema.parse({ body: req.body });
+
+        const result = await authService.updateCustomerProfile(user.sub, {
+            name: dto.name,
+            email: dto.email,
+            foodPreferences: dto.foodPreferences,
+            profilePicture: dto.profilePicture,
+        });
+
+        if (!result.success) {
+            return res.status(404).json({
+                success: false,
+                message: result.message ?? "Customer profile not found",
+            });
+        }
+
+        return res.status(200).json({
+            success: true,
+            message: "Profile updated successfully",
+            data: result.profile,
         });
     });
 }
