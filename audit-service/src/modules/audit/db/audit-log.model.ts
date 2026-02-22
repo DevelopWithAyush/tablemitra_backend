@@ -1,5 +1,5 @@
 import mongoose, { Schema, Document } from "mongoose";
-import { ActorRole, AuditAction, EntityType, RETENTION_DAYS } from "../audit.types";
+import { ActorRole, AuditAction, EntityType, RETENTION_DAYS } from "../audit.types.js";
 
 
 export interface IAuditLog extends Document {

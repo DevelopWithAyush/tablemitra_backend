@@ -1,8 +1,8 @@
 import express from "express";
 import dotenv from "dotenv";
-import { connectDB } from "./infra/db/db";
-import { connectRabbitMQ } from "./infra/rabbitmq/rabbtmq";
-import { startAuditConsumer } from "./modules/audit/audit.consumer";
+import { connectDB } from "./infra/db/db.js";
+import { connectRabbitMQ } from "./infra/rabbitmq/rabbtmq.js";
+import { startAuditConsumer } from "./modules/audit/audit.consumer.js";
 
 dotenv.config();
 
