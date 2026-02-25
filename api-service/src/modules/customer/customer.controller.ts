@@ -51,7 +51,7 @@ export const handleCustomerScan = asyncHandler(async (req: Request, res: Respons
     }
 
     let userId: string | null = null;
-    const token = req.cookies["accessToken_customer"] ?? req.headers.authorization?.replace(/^Bearer\s+/i, "");
+    const token = req.cookies["accessToken"] ?? req.headers.authorization?.replace(/^Bearer\s+/i, "");
     if (token) {
         try {
             const decoded = verifyAccessToken(token) as IJwtPayload;

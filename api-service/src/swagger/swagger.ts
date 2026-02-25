@@ -42,6 +42,7 @@ const options: swaggerJsdoc.Options = {
             { name: "Service - Categories", description: "Service category management (Manager/FrontDesk/RoomService)" },
             { name: "Service - Services", description: "Individual service management (Manager/FrontDesk/RoomService)" },
             { name: "Service - Full Catalog", description: "Full service catalog with nested structure" },
+            { name: "Orders", description: "Food orders – place order (customer/staff) and list with pagination & search" },
         ],
         components: {
             schemas: {

@@ -75,6 +75,7 @@ class QrCodeService {
             roomNumber: trimmed,
             isActive: true,
         });
+
         return !!exists;
     }
 

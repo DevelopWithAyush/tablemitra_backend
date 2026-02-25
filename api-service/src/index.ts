@@ -14,10 +14,13 @@ import cookieParser from "cookie-parser";
 import { swaggerDocs } from "./swagger/swagger.js";
 import { appValidator } from "./middleware/app-validator.middleware.js";
 import { startAttachmentCleanupJob } from "./modules/attachments/attach.cleanup.js";
+import http from "http";
+import { initSocket } from "./infra/socket/socket.server.js";
 
 dotenv.config();
 
 const app = express();
+const server = http.createServer(app);
 
 app.use(requestLogger);
 
@@ -42,7 +45,7 @@ app.use(cors({
     exposedHeaders: ['Content-Disposition'],
     credentials: true,
 }));
-app.use(cookieParser());    
+app.use(cookieParser());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -59,9 +62,10 @@ app.get("/health", (req: Request, res: Response) => {
     });
 });
 
-app.use("/api/v1/:app", appValidator, router);
+app.use("/api/v1/:app", appValidator, router); 
 
+initSocket(server);
 app.use(errorMiddleware);
-app.listen(process.env.PORT, () => {
+server.listen(process.env.PORT, () => {
     logger.info(`Server is running on port ${process.env.PORT}`);
 });

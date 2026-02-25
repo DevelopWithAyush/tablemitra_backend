@@ -1,0 +1,364 @@
+paths:
+  # ==================== PLACE FOOD ORDER ====================
+  /api/v1/{app}/orders/food:
+    post:
+      tags:
+        - Orders
+      summary: Place a food order
+      description: |
+        Single API for both customer and staff (role-based behaviour).
+        - **Customer** (app=customer): Room context from cookies (`customer_room_hotel_id`, `customer_room_session_id`, `customer_room_room_number`). Do not send `roomNumber`; it is ignored. Order is created with source GUEST, channelType ROOM.
+        - **Staff** (manager, frontdesk, kitchen, room-service): Send `roomNumber` to place order for a guest room. Backend resolves active room session; returns 400 "No active room session for this room" if none. Hotel from JWT ctx. Optional `forStaff: true` to place order for staff (no room). Order is created with source STAFF_FOR_GUEST or STAFF.
+        Requires authentication (Bearer or cookie).
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/OrdersAppParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - items
+              properties:
+                items:
+                  type: array
+                  minItems: 1
+                  items:
+                    $ref: "#/components/schemas/OrderItemInput"
+                roomNumber:
+                  type: string
+                  maxLength: 20
+                  description: "Required for staff when placing order for a guest room. Ignored for customer."
+                forStaff:
+                  type: boolean
+                  default: false
+                  description: "When true (staff only), order is for staff (no room)."
+            examples:
+              customerOrder:
+                summary: Customer places own order (room from cookies)
+                description: Use with app=customer. Room context from cookies; do not send roomNumber. Items can include variantId/variantName, discountedPrice, isUpsell.
+                value:
+                  items:
+                    - itemId: "6990a1b9624644e833e5a32a"
+                      itemName: "Chicken Burger"
+                      price: 100
+                      discountedPrice: 100
+                      quantity: 1
+                      isUpsell: false
+                    - itemId: "6990a6f7624644e833e5a44f"
+                      itemName: "Cheez Corn Pizza"
+                      price: 270
+                      discountedPrice: 270
+                      quantity: 1
+                      variantId: "699199777371029da1b06ea0"
+                      variantName: "Half"
+                      isUpsell: false
+                    - itemId: "69919258c28a27aebd364912"
+                      itemName: "Pizza 01 Large"
+                      price: 699
+                      quantity: 1
+                      isUpsell: true
+              staffForGuest:
+                summary: Staff places order for guest (room)
+                description: Use with app=manager, frontdesk, kitchen or room-service. Send roomNumber; backend resolves room session.
+                value:
+                  items:
+                    - itemId: "6990a1b9624644e833e5a32a"
+                      itemName: "Chicken Burger"
+                      price: 100
+                      quantity: 1
+                      isUpsell: false
+                    - itemId: "507f1f77bcf86cd799439012"
+                      itemName: "Garlic Bread"
+                      price: 149
+                      discountedPrice: 129
+                      quantity: 2
+                      isUpsell: false
+                  roomNumber: "101"
+              staffForStaff:
+                summary: Staff places order for staff (self / internal)
+                description: Use with staff app. Order is for staff (no room); no roomNumber.
+                value:
+                  items:
+                    - itemId: "507f1f77bcf86cd799439011"
+                      itemName: "Staff Meal"
+                      price: 99
+                      quantity: 1
+                      isUpsell: false
+                  forStaff: true
+      responses:
+        "201":
+          description: Food order created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "Food order created successfully"
+                  data:
+                    $ref: "#/components/schemas/FoodOrder"
+        "400":
+          description: Bad request (e.g. room context required, no active room session)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrderError"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrderError"
+
+    get:
+      tags:
+        - Orders
+      summary: Get food orders (paginated, search)
+      description: |
+        Role-based listing and enrichment:
+        - **Customer** (app=customer): Orders where placedById or customerId is the user. Response includes `hotel` (name, address) per order.
+        - **Staff** (hotel context): Orders for the staff's hotel (JWT ctx.id). Response includes `customer` (userId, phone) per order.
+        - **Admin/Chain** (chain context): Orders for hotels in the chain. Response includes `hotel` and `customer` per order.
+        Pagination uses `page` and `limit`. `search` matches room number and table number (case-insensitive). Order identity is MongoDB `_id`.
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/OrdersAppParam"
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: search
+          in: query
+          schema:
+            type: string
+            maxLength: 100
+          description: Smart search on room number and table number
+      responses:
+        "200":
+          description: Paginated list of orders with role-based enrichment
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      orders:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/OrderListItem"
+                      total:
+                        type: integer
+                        example: 50
+                      page:
+                        type: integer
+                        example: 1
+                      limit:
+                        type: integer
+                        example: 20
+                      hasMore:
+                        type: boolean
+                        example: true
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrderError"
+
+components:
+  parameters:
+    OrdersAppParam:
+      name: app
+      in: path
+      required: true
+      schema:
+        type: string
+        enum: [admin, founder, customer-care, sales, manager, frontdesk, kitchen, room-service, customer]
+      description: Application/panel (determines place-order behaviour and list filter)
+
+  schemas:
+    OrderItemInput:
+      type: object
+      description: "One line item. Required - itemId, itemName, price, quantity. Optional - discountedPrice, variantId, variantName, isUpsell (true for add-ons/suggested items)."
+      required:
+        - itemId
+        - itemName
+        - price
+        - quantity
+      properties:
+        itemId:
+          type: string
+          pattern: "^[0-9a-fA-F]{24}$"
+          description: Menu item ID (MongoDB ObjectId)
+        itemName:
+          type: string
+          minLength: 1
+          maxLength: 200
+          description: Display name of the item
+        price:
+          type: number
+          minimum: 0
+          description: Unit price (before discount)
+        discountedPrice:
+          type: number
+          minimum: 0
+          description: Optional discounted unit price; if omitted, price is used
+        quantity:
+          type: integer
+          minimum: 1
+          description: Number of units
+        variantId:
+          type: string
+          pattern: "^[0-9a-fA-F]{24}$"
+          description: Optional variant ID when item has size/option (e.g. Large, Medium)
+        variantName:
+          type: string
+          maxLength: 100
+          description: Optional variant display name (e.g. Large, Medium)
+        isUpsell:
+          type: boolean
+          default: false
+          description: true when item is an add-on or suggested item (upsell)
+
+    FoodOrder:
+      type: object
+      description: Order identity is MongoDB _id.
+      properties:
+        _id:
+          type: string
+          description: Order ID (MongoDB ObjectId)
+        hotelId:
+          type: string
+        placedById:
+          type: string
+        source:
+          type: string
+          enum: [GUEST, STAFF_FOR_GUEST, STAFF]
+        channelType:
+          type: string
+          enum: [ROOM, RESTAURANT, BAR, INTERNAL]
+        customerId:
+          type: string
+          nullable: true
+        roomSessionId:
+          type: string
+          nullable: true
+        roomNumber:
+          type: string
+          nullable: true
+        tableNumber:
+          type: string
+          nullable: true
+        zone:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [PENDING, PREPARING, SERVED, REJECTED]
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/OrderItemInput"
+        bill:
+          type: object
+          properties:
+            subtotal: { type: number }
+            serviceCharge: { type: number }
+            gstAndOther: { type: number }
+            toPay: { type: number }
+        count:
+          type: integer
+        paymentStatus:
+          type: string
+          enum: [PENDING, PAID, REFUNDED]
+        paidAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    OrderListItem:
+      type: object
+      description: Order list item with optional hotel/customer enrichment by role. Order identity is _id.
+      properties:
+        _id: { type: string }
+        hotelId: { type: string }
+        placedById: { type: string }
+        source: { type: string }
+        channelType: { type: string }
+        customerId: { type: string, nullable: true }
+        roomSessionId: { type: string, nullable: true }
+        roomNumber: { type: string, nullable: true }
+        tableNumber: { type: string, nullable: true }
+        zone: { type: string, nullable: true }
+        status: { type: string }
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/OrderItemInput"
+        bill:
+          type: object
+          properties:
+            subtotal: { type: number }
+            serviceCharge: { type: number }
+            gstAndOther: { type: number }
+            toPay: { type: number }
+        count: { type: integer }
+        paymentStatus: { type: string }
+        paidAt: { type: string, format: date-time, nullable: true }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        hotel:
+          type: object
+          description: Present for customer list and admin/chain list (name, address)
+          nullable: true
+          properties:
+            name: { type: string }
+            address: { type: string }
+        customer:
+          type: object
+          description: Present for staff and admin/chain list (userId, phone)
+          nullable: true
+          properties:
+            userId: { type: string }
+            phone: { type: string }
+
+    OrderError:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        message:
+          type: string
+          example: "Room context required. Please scan room QR or ensure cookies are set."

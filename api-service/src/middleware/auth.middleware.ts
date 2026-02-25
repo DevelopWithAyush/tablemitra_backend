@@ -11,7 +11,7 @@ export const authMiddleware = asyncHandler(async (req: Request, res: Response, n
         return next(new ErrorHandler("route not found", 404));
     }
 
-    const cookieName = `accessToken_${app}`;
+    const cookieName = `accessToken`;
     const token = req.headers.authorization?.split(" ")[1] || req.cookies[cookieName];
 
     logger.info(`token: ${token ? "present" : "missing"}`);
@@ -33,7 +33,7 @@ export const authMiddleware = asyncHandler(async (req: Request, res: Response, n
             secure: true,
             sameSite: "none"
         }); 
-        res.clearCookie(`refreshToken_${app}`, {
+        res.clearCookie(`refreshToken`, {
             httpOnly: true,
             secure: true,
             sameSite:"none"

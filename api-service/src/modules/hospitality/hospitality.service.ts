@@ -776,7 +776,7 @@ class HospitalityService {
             return { success: false, message: "Room is already occupied" };
         }
 
-        const roomExists = await qrCodeService.isValidRoomForHotel(hotelId, data.roomNumber.trim());
+        const roomExists = await qrCodeService.isValidRoomForHotel(hotelId, data.roomNumber.trim()); 
         if (!roomExists) {
             return { success: false, message: "Room does not exist for this hotel" };
         }
@@ -1173,6 +1173,53 @@ class HospitalityService {
             success: true,
             data: { ...hotel, manager, staffCount },
         };
+    };
+
+    /**
+     * Get active room session by hotel and room number. Used when staff places order for a room.
+     * Returns roomSessionId and optional primary guest userId from metadata.guests (first with userId).
+     */
+    getActiveRoomSessionForOrder = async (
+        hotelId: string,
+        roomNumber: string
+    ): Promise<
+        ServiceResult<{
+            roomSessionId: string;
+            roomNumber: string;
+            hotelId: string;
+            customerId: string | null;
+        }>
+    > => {
+        const session = await RoomSession.findOne({
+            hotelId: new Types.ObjectId(hotelId),
+            roomNumber: roomNumber.trim(),
+            status: "ACTIVE",
+        }).lean();
+
+        if (!session) {
+            return { success: false, message: "No active room session for this room" };
+        }
+
+        const guests = (session.metadata?.guests ?? []) as Array<{ userId?: Types.ObjectId }>;
+        const firstGuestUserId = guests[0]?.userId?.toString() ?? null;
+
+        return {
+            success: true,
+            data: {
+                roomSessionId: session._id.toString(),
+                roomNumber: session.roomNumber,
+                hotelId,
+                customerId: firstGuestUserId,
+            },
+        };
+    };
+
+    /**
+     * Get all hotel IDs for a chain (for chain-level order listing). Used by orders module (DDD).
+     */
+    getHotelIdsByChainId = async (chainId: string): Promise<string[]> => {
+        const hotels = await Hotel.find({ chainId, isDeleted: false }).select("_id").lean();
+        return hotels.map((h) => h._id.toString());
     };
 
     /**

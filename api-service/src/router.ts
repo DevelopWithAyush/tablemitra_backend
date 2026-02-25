@@ -7,6 +7,7 @@ import qrCodeRoutes from "./modules/qr-code/qr-code.routes.js";
 import attachmentRoutes from "./modules/attachments/attach.routes.js";
 import menuRoutes from "./modules/menu/menu.routes.js";
 import serviceRoutes from "./modules/service/service.routes.js";
+import ordersRoutes from "./modules/orders/orders.routes.js";
 import { handleCustomerScan } from "./modules/customer/customer.controller.js";
 
 // mergeParams: true to inherit :app from parent route
@@ -38,5 +39,8 @@ router.use("/menu", menuRoutes);
 
 // Service optimization routes (service categories, services)
 router.use("/service", serviceRoutes);
+
+// Orders (food orders: place + list; customer vs staff via app + ctx)
+router.use("/orders", ordersRoutes);
 
 export default router;

@@ -48,13 +48,13 @@ class AuthController {
         const ACCESS_TOKEN_MAX_AGE = 15 * 60 * 1000;
         const REFRESH_TOKEN_MAX_AGE = 30 * 24 * 60 * 60 * 1000;
 
-        res.cookie(`refreshToken_${app}`, refreshToken, {
+        res.cookie("refreshToken", refreshToken, {
             httpOnly: true,
             secure: true,
             sameSite: 'none',
             maxAge: REFRESH_TOKEN_MAX_AGE,
         });
-        res.cookie(`accessToken_${app}`, accessToken, {
+        res.cookie("accessToken", accessToken, {
             httpOnly: true,
             secure: true,
             sameSite: 'none',
@@ -88,9 +88,8 @@ class AuthController {
         const { app } = req.params;
 
         // Get refresh token from cookie
-        const refreshTokenValue = req.cookies[`refreshToken_${app}`];
-        logger.info(`refreshTokenValue: ${refreshTokenValue}`);
-
+        const refreshTokenValue = req.cookies["refreshToken"];
+        
         if (!refreshTokenValue) {
             return res.status(401).json({
                 success: false,
@@ -102,13 +101,13 @@ class AuthController {
 
         if (!result.success) {
             // Clear cookies on failure
-            res.clearCookie(`accessToken_${app}`, {
+            res.clearCookie("accessToken", {
                 httpOnly: true,
                 secure: true,
                 sameSite: 'none',
                 maxAge: 0,
             });
-            res.clearCookie(`refreshToken_${app}`, {
+            res.clearCookie("refreshToken", {
                 httpOnly: true,
                 secure: true,
                 sameSite: 'none',
@@ -124,7 +123,7 @@ class AuthController {
         const ACCESS_TOKEN_MAX_AGE = 24 * 60 * 1000 * 60; // 24 hours
 
         // Set new access token cookie
-        res.cookie(`accessToken_${app}`, result.accessToken, {
+        res.cookie("accessToken", result.accessToken, {
             httpOnly: true,
             secure: true,
             sameSite: 'none',
@@ -174,7 +173,7 @@ class AuthController {
             });
         }
 
-        res.clearCookie(`accessToken_${app}`,
+        res.clearCookie("accessToken",
             {
                 httpOnly: true,
                 secure: true,
@@ -182,7 +181,7 @@ class AuthController {
                 maxAge: 0,
             }
         );
-        res.clearCookie(`refreshToken_${app}`, {
+        res.clearCookie("refreshToken", {
             httpOnly: true,
             secure: true,
             sameSite: 'none',
@@ -265,13 +264,13 @@ class AuthController {
         const ACCESS_TOKEN_MAX_AGE = 24 * 60 * 1000 * 60; // 24 hours
         const REFRESH_TOKEN_MAX_AGE = 30 * 24 * 60 * 60 * 1000;
 
-        res.cookie(`refreshToken_${app}`, refreshToken, {
+        res.cookie("refreshToken", refreshToken, {
             httpOnly: true,
             secure: true,
             sameSite: 'none',
             maxAge: REFRESH_TOKEN_MAX_AGE,
         });
-        res.cookie(`accessToken_${app}`, accessToken, {
+        res.cookie("accessToken", accessToken, {
             httpOnly: true,
             secure: true,
             sameSite: 'none',
