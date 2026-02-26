@@ -12,7 +12,12 @@ export class OrderController {
     placeOrder = asyncHandler(async (req: Request, res: Response) => {
         const user = (req as any).user as IJwtPayload;
         const app = (req.params.app as string) ?? "";
-        const { items, roomNumber, forStaff } = req.body as { items: OrderItemInput[]; roomNumber?: string; forStaff?: boolean };
+        const { items, roomNumber, forStaff, cookingRequest } = req.body as {
+            items: OrderItemInput[];
+            roomNumber?: string;
+            forStaff?: boolean;
+            cookingRequest?: string;
+        };
 
         const customerRoomHotelId = req.cookies?.customer_room_hotel_id as string | undefined;
         const customerRoomSessionId = req.cookies?.customer_room_session_id as string | undefined;
@@ -25,6 +30,7 @@ export class OrderController {
             items,
             roomNumber,
             forStaff,
+            cookingRequest,
             customerRoomHotelId,
             customerRoomSessionId,
             customerRoomNumber,
@@ -73,12 +79,32 @@ export class OrderController {
         });
     });
 
+    updateOrderStatus = asyncHandler(async (req: Request, res: Response) => {
+        const user = (req as any).user as IJwtPayload;
+        const orderId = (req.params.orderId as string) ?? "";
+        const { status } = req.body as { status: "PREPARING" | "SERVED" | "REJECTED" };
+
+        const order = await foodOrderService.updateOrderStatus({
+            orderId,
+            newStatus: status,
+            ctxType: user.ctx?.type,
+            ctxId: user.ctx?.id,
+        });
+
+        res.status(200).json({
+            success: true,
+            message: "Order status updated",
+            data: order,
+        });
+    });
+
     getOrders = asyncHandler(async (req: Request, res: Response) => {
         const user = (req as any).user as IJwtPayload;
         const app = (req.params.app as string) ?? "";
         const page = Number(req.query.page) || 1;
         const limit = Number(req.query.limit) || 20;
         const search = (req.query.search as string)?.trim();
+        const status = (req.query.status as string) || undefined;
 
         const result = await foodOrderService.getOrders({
             userId: user.sub,
@@ -88,6 +114,7 @@ export class OrderController {
             page,
             limit,
             search,
+            status,
         });
 
         res.status(200).json({

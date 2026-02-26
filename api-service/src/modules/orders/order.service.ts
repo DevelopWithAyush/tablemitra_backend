@@ -38,6 +38,7 @@ export type CreateFoodOrderParams = {
     roomNumber?: string | null;
     tableNumber?: string | null;
     zone?: string | null;
+    cookingRequest?: string | null;
 };
 
 function validateChannelFields(params: CreateFoodOrderParams): void {
@@ -68,6 +69,7 @@ export const foodOrderService = {
             roomNumber: params.roomNumber ?? null,
             tableNumber: params.tableNumber ?? null,
             zone: params.zone ?? null,
+            cookingRequest: params.cookingRequest ?? null,
             items: params.items,
             bill,
             count,
@@ -80,7 +82,8 @@ export const foodOrderService = {
         hotelId: string,
         roomSessionId: string,
         roomNumber: string,
-        items: OrderItemInputInternal[]
+        items: OrderItemInputInternal[],
+        cookingRequest?: string | null
     ) => {
         return foodOrderService.createFoodOrder({
             hotelId,
@@ -91,6 +94,7 @@ export const foodOrderService = {
             roomSessionId,
             roomNumber,
             items,
+            cookingRequest: cookingRequest ?? null,
         });
     },
 
@@ -104,6 +108,7 @@ export const foodOrderService = {
         items: OrderItemInputInternal[];
         roomNumber?: string;
         forStaff?: boolean;
+        cookingRequest?: string | null;
         customerRoomHotelId?: string;
         customerRoomSessionId?: string;
         customerRoomNumber?: string;
@@ -123,7 +128,8 @@ export const foodOrderService = {
                 hotelId,
                 roomSessionId,
                 roomNumber,
-                params.items
+                params.items,
+                params.cookingRequest
             );
         }
 
@@ -135,6 +141,7 @@ export const foodOrderService = {
                 source: "STAFF",
                 channelType: "INTERNAL",
                 items: params.items,
+                cookingRequest: params.cookingRequest ?? null,
             });
         }
 
@@ -162,7 +169,82 @@ export const foodOrderService = {
             roomSessionId,
             roomNumber: sessionResult.data.roomNumber,
             items: params.items,
+            cookingRequest: params.cookingRequest ?? null,
         });
+    },
+
+    /**
+     * Update order status (PREPARING, SERVED, REJECTED). Publishes analytics status-change event.
+     * Access: hotel staff (ctx.id = hotelId) or chain/founder (order's hotel in chain).
+     */
+    updateOrderStatus: async (params: {
+        orderId: string;
+        newStatus: "PREPARING" | "SERVED" | "REJECTED";
+        ctxType?: string;
+        ctxId?: string;
+    }) => {
+        const order = await FoodOrderModel.findById(params.orderId).lean();
+        if (!order) throw new Error("Order not found");
+
+        const hotelId = (order.hotelId as { toString: () => string }).toString();
+        if (params.ctxType === "HOTEL" && params.ctxId && params.ctxId !== hotelId) {
+            throw new Error("Forbidden: order does not belong to your hotel");
+        }
+        if (params.ctxType === "CHAIN" && params.ctxId) {
+            const hotelIds = await hospitalityService.getHotelIdsByChainId(params.ctxId);
+            if (!hotelIds.includes(hotelId)) throw new Error("Forbidden: order does not belong to your chain");
+        }
+        if (!params.ctxType || !params.ctxId) throw new Error("Context required");
+
+        const previousStatus = order.status as string;
+        const validTransitions: Record<string, string[]> = {
+            PENDING: ["PREPARING", "REJECTED"],
+            PREPARING: ["SERVED", "REJECTED"],
+        };
+        const allowed = validTransitions[previousStatus];
+        if (!allowed || !allowed.includes(params.newStatus)) {
+            throw new Error(`Invalid transition from ${previousStatus} to ${params.newStatus}`);
+        }
+
+        const now = new Date();
+        const update: Record<string, unknown> = { status: params.newStatus };
+        if (params.newStatus === "PREPARING") update.acceptedAt = now;
+        if (params.newStatus === "SERVED") update.servedAt = now;
+        if (params.newStatus === "REJECTED") update.rejectedAt = now;
+
+        await FoodOrderModel.findByIdAndUpdate(params.orderId, { $set: update });
+
+        const hotelRes = await hospitalityService.getHotelById(hotelId);
+        const rawChain = hotelRes.success && hotelRes.data ? (hotelRes.data as { chainId?: { _id?: unknown } | string }).chainId : undefined;
+        const chainId = rawChain ? (typeof rawChain === "object" && rawChain._id ? String(rawChain._id) : String(rawChain)) : undefined;
+
+        const orderItems = (order.items ?? []) as Array<{ isUpsell?: boolean; price: number; discountedPrice?: number; quantity: number }>;
+        const upsellRevenue = orderItems
+            .filter((i) => i.isUpsell)
+            .reduce((sum, i) => sum + ((i.discountedPrice ?? i.price) ?? 0) * (i.quantity ?? 0), 0);
+        const totalItemsSold = orderItems.reduce((sum, i) => sum + (i.quantity ?? 0), 0);
+        const amount = order.source === "STAFF" ? 0 : (order.bill as { toPay?: number })?.toPay ?? 0;
+
+        const eventMap = { PREPARING: "ORDER_PREPARING" as const, SERVED: "ORDER_SERVED" as const, REJECTED: "ORDER_REJECTED" as const };
+        publishFoodOrderEvent({
+            event: eventMap[params.newStatus],
+            orderId: params.orderId,
+            hotelId,
+            chainId,
+            source: order.source as "GUEST" | "STAFF_FOR_GUEST" | "STAFF",
+            channelType: order.channelType,
+            amount,
+            upsellRevenue,
+            totalItemsSold,
+            createdAt: (order.createdAt as Date).toISOString(),
+            previousStatus,
+            newStatus: params.newStatus,
+            servedAt: params.newStatus === "SERVED" ? now.toISOString() : undefined,
+            acceptedAt: params.newStatus === "PREPARING" ? now.toISOString() : undefined,
+            rejectedAt: params.newStatus === "REJECTED" ? now.toISOString() : undefined,
+        }).catch(() => {});
+
+        return await FoodOrderModel.findById(params.orderId).lean();
     },
 
     /**
@@ -176,6 +258,7 @@ export const foodOrderService = {
         page: number;
         limit: number;
         search?: string;
+        status?: string;
     }): Promise<OrderListResponse> => {
         const filter: Record<string, unknown> = {};
 
@@ -203,15 +286,42 @@ export const foodOrderService = {
             (filter.$and as unknown[]).push(searchCond);
         }
 
+        if (params.status) {
+            filter.status = params.status;
+        }
+
         const skip = (params.page - 1) * params.limit;
-        const [orders, total] = await Promise.all([
-            FoodOrderModel.find(filter)
-                .sort({ createdAt: -1 })
-                .skip(skip)
-                .limit(params.limit)
-                .lean(),
-            FoodOrderModel.countDocuments(filter),
-        ]);
+
+        const total = await FoodOrderModel.countDocuments(filter);
+
+        const orders: Record<string, unknown>[] =
+            params.status != null
+                ? await FoodOrderModel.find(filter)
+                      .sort({ createdAt: -1 })
+                      .skip(skip)
+                      .limit(params.limit)
+                      .lean()
+                : await FoodOrderModel.aggregate([
+                      { $match: filter },
+                      {
+                          $addFields: {
+                              statusOrder: {
+                                  $switch: {
+                                      branches: [
+                                          { case: { $eq: ["$status", "PENDING"] }, then: 1 },
+                                          { case: { $eq: ["$status", "PREPARING"] }, then: 2 },
+                                          { case: { $eq: ["$status", "SERVED"] }, then: 3 },
+                                          { case: { $eq: ["$status", "REJECTED"] }, then: 4 },
+                                      ],
+                                      default: 5,
+                                  },
+                              },
+                          },
+                      },
+                      { $sort: { statusOrder: 1, createdAt: -1 } },
+                      { $skip: skip },
+                      { $limit: params.limit },
+                  ]);
 
         const list: OrderListItem[] = orders.map((o: Record<string, unknown>) => ({
             _id: (o._id as { toString: () => string }).toString(),
@@ -225,6 +335,7 @@ export const foodOrderService = {
             tableNumber: (o.tableNumber as string) ?? null,
             zone: (o.zone as string) ?? null,
             status: o.status as string,
+            cookingRequest: (o.cookingRequest as string) ?? null,
             items: (o.items as unknown[]) as OrderListItem["items"],
             bill: o.bill as OrderListItem["bill"],
             count: o.count as number,

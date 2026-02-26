@@ -37,6 +37,10 @@ paths:
                   type: boolean
                   default: false
                   description: "When true (staff only), order is for staff (no room)."
+                cookingRequest:
+                  type: string
+                  maxLength: 500
+                  description: "Order-level free-text cooking request / special instructions (e.g. no onion, less spicy)."
             examples:
               customerOrder:
                 summary: Customer places own order (room from cookies)
@@ -62,6 +66,7 @@ paths:
                       price: 699
                       quantity: 1
                       isUpsell: true
+                  cookingRequest: "No onion, less spicy please"
               staffForGuest:
                 summary: Staff places order for guest (room)
                 description: Use with app=manager, frontdesk, kitchen or room-service. Send roomNumber; backend resolves room session.
@@ -79,6 +84,7 @@ paths:
                       quantity: 2
                       isUpsell: false
                   roomNumber: "101"
+                  cookingRequest: "Extra napkins, serve together"
               staffForStaff:
                 summary: Staff places order for staff (self / internal)
                 description: Use with staff app. Order is for staff (no room); no roomNumber.
@@ -90,6 +96,7 @@ paths:
                       quantity: 1
                       isUpsell: false
                   forStaff: true
+                  cookingRequest: "No ice"
       responses:
         "201":
           description: Food order created successfully
@@ -153,6 +160,14 @@ paths:
             type: string
             maxLength: 100
           description: Smart search on room number and table number
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [PENDING, PREPARING, SERVED, REJECTED]
+          description: |
+            Filter by order status. When omitted, all orders are returned sorted by
+            status order (PENDING first, then PREPARING, then SERVED, then REJECTED), then by createdAt descending.
       responses:
         "200":
           description: Paginated list of orders with role-based enrichment
@@ -185,6 +200,76 @@ paths:
                         example: true
         "401":
           description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrderError"
+
+  # ==================== UPDATE ORDER STATUS ====================
+  /api/v1/{app}/orders/food/{orderId}/status:
+    patch:
+      tags:
+        - Orders
+      summary: Update order status (kitchen / staff)
+      description: |
+        Update food order status. Requires UPDATE_ORDER permission and hotel or chain context.
+        Valid transitions - PENDING → PREPARING, PENDING → REJECTED; PREPARING → SERVED, PREPARING → REJECTED.
+        Publishes analytics status-change event for ordersByStatus and time metrics.
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/OrdersAppParam"
+        - name: orderId
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: "^[0-9a-fA-F]{24}$"
+          description: Order ID (MongoDB ObjectId)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - status
+              properties:
+                status:
+                  type: string
+                  enum: [PREPARING, SERVED, REJECTED]
+                  description: New status for the order
+      responses:
+        "200":
+          description: Order status updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "Order status updated"
+                  data:
+                    $ref: "#/components/schemas/FoodOrder"
+        "400":
+          description: Invalid transition or bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrderError"
+        "403":
+          description: Forbidden – no access to this order
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrderError"
+        "404":
+          description: Order not found
           content:
             application/json:
               schema:
@@ -277,9 +362,28 @@ components:
         zone:
           type: string
           nullable: true
+        cookingRequest:
+          type: string
+          nullable: true
+          description: "Order-level free-text cooking request / special instructions."
         status:
           type: string
           enum: [PENDING, PREPARING, SERVED, REJECTED]
+        acceptedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Set when status moves to PREPARING (kitchen accepted)
+        servedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Set when status moves to SERVED
+        rejectedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Set when status moves to REJECTED
         items:
           type: array
           items:
@@ -321,6 +425,7 @@ components:
         roomNumber: { type: string, nullable: true }
         tableNumber: { type: string, nullable: true }
         zone: { type: string, nullable: true }
+        cookingRequest: { type: string, nullable: true, description: "Order-level free-text cooking request." }
         status: { type: string }
         items:
           type: array

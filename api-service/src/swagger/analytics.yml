@@ -1,0 +1,421 @@
+tags:
+  - name: Analytics - Hotel
+    description: Manager panel – hotel-level analytics (VIEW_HOTEL_REPORTS, hotel context)
+  - name: Analytics - Chain
+    description: Founder panel – chain-level analytics (VIEW_CHAIN_REPORTS, chain context)
+
+paths:
+  # ==================== HOTEL (MANAGER) ====================
+  /api/v1/{app}/analytics/hotel/summary:
+    get:
+      tags: [Analytics - Hotel]
+      summary: Hotel analytics summary (KPIs + optional previous period)
+      description: Aggregated KPIs for the date range. All revenue metrics include upsell. Use compareWith=previous_period to get previous period for % change.
+      security: [{ BearerAuth: [] }, { CookieAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/AppParam"
+        - name: from
+          in: query
+          required: true
+          schema: { type: string, format: date, example: "2025-01-01" }
+        - name: to
+          in: query
+          required: true
+          schema: { type: string, format: date, example: "2025-01-31" }
+        - name: compareWith
+          in: query
+          schema: { type: string, enum: [previous_period] }
+      responses:
+        "200":
+          description: Summary with current (and previous if requested)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    properties:
+                      current: { $ref: "#/components/schemas/AnalyticsSummary" }
+                      previous: { $ref: "#/components/schemas/AnalyticsSummary" }
+        "403":
+          description: Forbidden – missing VIEW_HOTEL_REPORTS or hotel context
+
+  /api/v1/{app}/analytics/hotel/revenue-timeseries:
+    get:
+      tags: [Analytics - Hotel]
+      summary: Hotel revenue time series (includes upsell in every period)
+      description: Revenue and upsell per period. groupBy=day|week|month|hour.
+      security: [{ BearerAuth: [] }, { CookieAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/AppParam"
+        - name: from
+          in: query
+          required: true
+          schema: { type: string, format: date }
+        - name: to
+          in: query
+          required: true
+          schema: { type: string, format: date }
+        - name: groupBy
+          in: query
+          schema: { type: string, enum: [day, week, month, hour], default: day }
+      responses:
+        "200":
+          description: Array of revenue data points (revenue, foodRevenue, serviceRevenue, upsellRevenue, upsellOrders per period)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/RevenueDataPoint" }
+
+  /api/v1/{app}/analytics/hotel/orders-timeseries:
+    get:
+      tags: [Analytics - Hotel]
+      summary: Hotel orders time series
+      parameters:
+        - $ref: "#/components/parameters/AppParam"
+        - name: from
+          in: query
+          required: true
+          schema: { type: string, format: date }
+        - name: to
+          in: query
+          required: true
+          schema: { type: string, format: date }
+        - name: groupBy
+          in: query
+          schema: { type: string, enum: [day, week, month, hour], default: day }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        period: { type: string }
+                        foodOrders: { type: number }
+                        serviceOrders: { type: number }
+
+  /api/v1/{app}/analytics/hotel/orders-by-status:
+    get:
+      tags: [Analytics - Hotel]
+      summary: Hotel orders breakdown by status (PENDING, PREPARING, SERVED, REJECTED, CANCELLED)
+      parameters:
+        - $ref: "#/components/parameters/AppParam"
+        - name: from
+          in: query
+          required: true
+          schema: { type: string, format: date }
+        - name: to
+          in: query
+          required: true
+          schema: { type: string, format: date }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data: { $ref: "#/components/schemas/OrdersByStatus" }
+
+  /api/v1/{app}/analytics/hotel/operational:
+    get:
+      tags: [Analytics - Hotel]
+      summary: Hotel operational metrics (acceptance/rejection rate, avg times, peak hour, upsell)
+      parameters:
+        - $ref: "#/components/parameters/AppParam"
+        - name: from
+          in: query
+          required: true
+          schema: { type: string, format: date }
+        - name: to
+          in: query
+          required: true
+          schema: { type: string, format: date }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data: { $ref: "#/components/schemas/OperationalMetrics" }
+
+  # ==================== CHAIN (FOUNDER) ====================
+  /api/v1/{app}/analytics/chain/summary:
+    get:
+      tags: [Analytics - Chain]
+      summary: Chain analytics summary (KPIs + optional previous period)
+      description: All revenue metrics include upsell. Optional hotels.activeHotelCount, hotels.totalRoomNights.
+      security: [{ BearerAuth: [] }, { CookieAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/AppParam"
+        - name: from
+          in: query
+          required: true
+          schema: { type: string, format: date }
+        - name: to
+          in: query
+          required: true
+          schema: { type: string, format: date }
+        - name: compareWith
+          in: query
+          schema: { type: string, enum: [previous_period] }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    properties:
+                      current: { $ref: "#/components/schemas/AnalyticsSummary" }
+                      previous: { $ref: "#/components/schemas/AnalyticsSummary" }
+                      hotels:
+                        type: object
+                        properties:
+                          activeHotelCount: { type: number }
+                          totalRoomNights: { type: number }
+
+  /api/v1/{app}/analytics/chain/revenue-timeseries:
+    get:
+      tags: [Analytics - Chain]
+      summary: Chain revenue time series (includes upsell in every period)
+      parameters:
+        - $ref: "#/components/parameters/AppParam"
+        - name: from
+          in: query
+          required: true
+          schema: { type: string, format: date }
+        - name: to
+          in: query
+          required: true
+          schema: { type: string, format: date }
+        - name: groupBy
+          in: query
+          schema: { type: string, enum: [day, week, month], default: day }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/RevenueDataPoint" }
+
+  /api/v1/{app}/analytics/chain/orders-timeseries:
+    get:
+      tags: [Analytics - Chain]
+      summary: Chain orders time series
+      parameters:
+        - $ref: "#/components/parameters/AppParam"
+        - name: from
+          in: query
+          required: true
+          schema: { type: string, format: date }
+        - name: to
+          in: query
+          required: true
+          schema: { type: string, format: date }
+        - name: groupBy
+          in: query
+          schema: { type: string, enum: [day, week, month], default: day }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        period: { type: string }
+                        foodOrders: { type: number }
+                        serviceOrders: { type: number }
+
+  /api/v1/{app}/analytics/chain/orders-by-status:
+    get:
+      tags: [Analytics - Chain]
+      summary: Chain orders breakdown by status
+      parameters:
+        - $ref: "#/components/parameters/AppParam"
+        - name: from
+          in: query
+          required: true
+          schema: { type: string, format: date }
+        - name: to
+          in: query
+          required: true
+          schema: { type: string, format: date }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data: { $ref: "#/components/schemas/OrdersByStatus" }
+
+  /api/v1/{app}/analytics/chain/operational:
+    get:
+      tags: [Analytics - Chain]
+      summary: Chain operational metrics (rates, times, upsell)
+      parameters:
+        - $ref: "#/components/parameters/AppParam"
+        - name: from
+          in: query
+          required: true
+          schema: { type: string, format: date }
+        - name: to
+          in: query
+          required: true
+          schema: { type: string, format: date }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data: { $ref: "#/components/schemas/OperationalMetrics" }
+
+  /api/v1/{app}/analytics/chain/hotels-ranking:
+    get:
+      tags: [Analytics - Chain]
+      summary: Chain hotels ranking by revenue or orders (includes upsell per hotel)
+      parameters:
+        - $ref: "#/components/parameters/AppParam"
+        - name: from
+          in: query
+          required: true
+          schema: { type: string, format: date }
+        - name: to
+          in: query
+          required: true
+          schema: { type: string, format: date }
+        - name: limit
+          in: query
+          schema: { type: integer, default: 20 }
+        - name: sortBy
+          in: query
+          schema: { type: string, enum: [revenue, orders], default: revenue }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/HotelRankingItem" }
+
+components:
+  parameters:
+    AppParam:
+      name: app
+      in: path
+      required: true
+      schema:
+        type: string
+        enum: [admin, founder, customer-care, sales, manager, frontdesk, kitchen, room-service, customer]
+
+  schemas:
+    RevenueDataPoint:
+      type: object
+      description: Every revenue response includes upsell at hotel and chain level.
+      properties:
+        period: { type: string }
+        revenue: { type: number }
+        foodRevenue: { type: number }
+        serviceRevenue: { type: number }
+        upsellRevenue: { type: number }
+        upsellOrders: { type: number }
+    OrdersByStatus:
+      type: object
+      properties:
+        PENDING: { type: number }
+        PREPARING: { type: number }
+        SERVED: { type: number }
+        REJECTED: { type: number }
+        CANCELLED: { type: number }
+        _percentages:
+          type: object
+          additionalProperties: { type: number }
+    OperationalMetrics:
+      type: object
+      properties:
+        acceptanceRate: { type: number }
+        rejectionRate: { type: number }
+        avgTimeToAcceptMinutes: { type: number }
+        avgTimeToServeMinutes: { type: number }
+        peakHour: { type: number }
+        lowestHour: { type: number }
+        upsellConversionRate: { type: number }
+        upsellRevenue: { type: number }
+        upsellContributionRate: { type: number }
+    AnalyticsSummary:
+      type: object
+      properties:
+        food:
+          type: object
+          properties:
+            totalOrders: { type: number }
+            totalRevenue: { type: number }
+            totalItemsSold: { type: number }
+            upsellRevenue: { type: number }
+            upsellOrders: { type: number }
+            upsellConversionRate: { type: number }
+            rejectedOrders: { type: number }
+            ordersByStatus: { $ref: "#/components/schemas/OrdersByStatus" }
+        service:
+          type: object
+          properties:
+            totalRequests: { type: number }
+            paidRevenue: { type: number }
+        overall:
+          type: object
+          properties:
+            totalRevenue: { type: number }
+            totalTransactions: { type: number }
+            totalUpsellRevenue: { type: number }
+            upsellContributionRate: { type: number }
+    HotelRankingItem:
+      type: object
+      properties:
+        hotelId: { type: string }
+        hotelName: { type: string }
+        revenue: { type: number }
+        foodRevenue: { type: number }
+        serviceRevenue: { type: number }
+        upsellRevenue: { type: number }
+        foodOrders: { type: number }
+        serviceOrders: { type: number }

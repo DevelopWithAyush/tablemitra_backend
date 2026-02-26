@@ -7,6 +7,9 @@ const ANALYTICS_ORDER_EXCHANGE = "analytics.orders.exchange";
 const ANALYTICS_ORDER_QUEUE = "analytics.orders.queue";
 const ROUTING_KEY = "food_order";
 
+const ORDER_STATUSES = ["PENDING", "PREPARING", "SERVED", "REJECTED", "CANCELLED"] as const;
+type OrderStatusKey = (typeof ORDER_STATUSES)[number];
+
 interface FoodOrderAnalyticsPayload {
     event: string;
     orderId: string;
@@ -15,11 +18,15 @@ interface FoodOrderAnalyticsPayload {
     source: string;
     channelType: string;
     amount: number;
-    /** Revenue from upsell items only; default 0 if missing (backward compat). */
     upsellRevenue?: number;
-    /** Total item count (sum of quantity); default 0 if missing. */
     totalItemsSold?: number;
     createdAt: string;
+    /** Status-change events only */
+    previousStatus?: string;
+    newStatus?: string;
+    servedAt?: string;
+    acceptedAt?: string;
+    rejectedAt?: string;
 }
 
 function parseDate(dateStr: string): { date: string; hour: number } {
@@ -27,6 +34,16 @@ function parseDate(dateStr: string): { date: string; hour: number } {
     const date = d.toISOString().slice(0, 10);
     const hour = d.getUTCHours();
     return { date, hour };
+}
+
+function minutesBetween(earlier: string, later: string): number {
+    const a = new Date(earlier).getTime();
+    const b = new Date(later).getTime();
+    return Math.round((b - a) / (60 * 1000));
+}
+
+function isValidStatus(s: string): s is OrderStatusKey {
+    return ORDER_STATUSES.includes(s as OrderStatusKey);
 }
 
 async function handleOrderCreated(payload: FoodOrderAnalyticsPayload): Promise<void> {
@@ -44,6 +61,7 @@ async function handleOrderCreated(payload: FoodOrderAnalyticsPayload): Promise<v
         "food.staffOrders": isGuest ? 0 : 1,
         "food.guestRevenue": revenue,
         "food.totalItemsSold": totalItemsSold,
+        "food.ordersByStatus.PENDING": 1,
         "overall.totalRevenue": revenue,
         "overall.totalTransactions": 1,
     };
@@ -60,6 +78,7 @@ async function handleOrderCreated(payload: FoodOrderAnalyticsPayload): Promise<v
         "food.staffOrders": isGuest ? 0 : 1,
         "food.totalRevenue": revenue,
         "food.totalItemsSold": totalItemsSold,
+        "food.ordersByStatus.PENDING": 1,
         "overall.totalRevenue": revenue,
         "overall.totalTransactions": 1,
     };
@@ -76,6 +95,7 @@ async function handleOrderCreated(payload: FoodOrderAnalyticsPayload): Promise<v
         "food.staffOrders": isGuest ? 0 : 1,
         "food.totalRevenue": revenue,
         "food.totalItemsSold": totalItemsSold,
+        "food.ordersByStatus.PENDING": 1,
         "overall.totalRevenue": revenue,
         "overall.totalTransactions": 1,
     };
@@ -116,6 +136,77 @@ async function handleOrderCreated(payload: FoodOrderAnalyticsPayload): Promise<v
     await Promise.all([hourlyUpdate, dailyUpdate, chainUpdate]);
 }
 
+async function handleOrderStatusChange(payload: FoodOrderAnalyticsPayload): Promise<void> {
+    const prev = payload.previousStatus && isValidStatus(payload.previousStatus) ? payload.previousStatus : null;
+    const next = payload.newStatus && isValidStatus(payload.newStatus) ? payload.newStatus : null;
+    if (!prev || !next || prev === next) return;
+
+    const { date, hour } = parseDate(payload.createdAt);
+    const chainId = payload.chainId ?? "";
+    if (!chainId) return;
+
+    const hourlyInc: Record<string, number> = {
+        [`food.ordersByStatus.${prev}`]: -1,
+        [`food.ordersByStatus.${next}`]: 1,
+    };
+    const dailyInc: Record<string, number> = {
+        [`food.ordersByStatus.${prev}`]: -1,
+        [`food.ordersByStatus.${next}`]: 1,
+    };
+    const chainInc: Record<string, number> = {
+        [`food.ordersByStatus.${prev}`]: -1,
+        [`food.ordersByStatus.${next}`]: 1,
+    };
+
+    if (next === "REJECTED") {
+        hourlyInc["food.rejectedOrders"] = 1;
+        dailyInc["food.rejectedOrders"] = 1;
+        chainInc["food.rejectedOrders"] = 1;
+    }
+
+    if (next === "SERVED" && payload.servedAt && payload.createdAt) {
+        const minutes = minutesBetween(payload.createdAt, payload.servedAt);
+        if (minutes >= 0) {
+            hourlyInc["food.sumTimeToServeMinutes"] = minutes;
+            hourlyInc["food.countServedOrders"] = 1;
+            dailyInc["food.sumTimeToServeMinutes"] = minutes;
+            dailyInc["food.countServedOrders"] = 1;
+            chainInc["food.sumTimeToServeMinutes"] = minutes;
+            chainInc["food.countServedOrders"] = 1;
+        }
+    }
+
+    if ((next === "PREPARING" || next === "SERVED") && payload.acceptedAt && payload.createdAt) {
+        const minutes = minutesBetween(payload.createdAt, payload.acceptedAt);
+        if (minutes >= 0) {
+            hourlyInc["food.sumTimeToAcceptMinutes"] = minutes;
+            hourlyInc["food.countAcceptedOrders"] = 1;
+            dailyInc["food.sumTimeToAcceptMinutes"] = minutes;
+            dailyInc["food.countAcceptedOrders"] = 1;
+            chainInc["food.sumTimeToAcceptMinutes"] = minutes;
+            chainInc["food.countAcceptedOrders"] = 1;
+        }
+    }
+
+    const hourlyUpdate = HotelHourlyStats.findOneAndUpdate(
+        { hotelId: payload.hotelId, date, hour },
+        { $inc: hourlyInc },
+        { upsert: false }
+    );
+    const dailyUpdate = HotelDailyStats.findOneAndUpdate(
+        { hotelId: payload.hotelId, date },
+        { $inc: dailyInc },
+        { upsert: false }
+    );
+    const chainUpdate = ChainDailyStats.findOneAndUpdate(
+        { chainId, date },
+        { $inc: chainInc },
+        { upsert: false }
+    );
+
+    await Promise.all([hourlyUpdate, dailyUpdate, chainUpdate]);
+}
+
 export const startOrderConsumer = async (): Promise<void> => {
     const channel = getRabbitChannel();
     await channel.assertExchange(ANALYTICS_ORDER_EXCHANGE, "direct", { durable: true });
@@ -127,6 +218,14 @@ export const startOrderConsumer = async (): Promise<void> => {
 
     console.log(`[Analytics] Consuming from queue: ${ANALYTICS_ORDER_QUEUE}`);
 
+    const statusChangeEvents = new Set([
+        "ORDER_ACCEPTED",
+        "ORDER_PREPARING",
+        "ORDER_SERVED",
+        "ORDER_REJECTED",
+        "ORDER_CANCELLED",
+    ]);
+
     channel.consume(
         ANALYTICS_ORDER_QUEUE,
         async (msg) => {
@@ -135,6 +234,8 @@ export const startOrderConsumer = async (): Promise<void> => {
                 const payload: FoodOrderAnalyticsPayload = JSON.parse(msg.content.toString());
                 if (payload.event === "ORDER_CREATED") {
                     await handleOrderCreated(payload);
+                } else if (statusChangeEvents.has(payload.event)) {
+                    await handleOrderStatusChange(payload);
                 }
                 channel.ack(msg);
             } catch (err) {

@@ -8,6 +8,7 @@ import attachmentRoutes from "./modules/attachments/attach.routes.js";
 import menuRoutes from "./modules/menu/menu.routes.js";
 import serviceRoutes from "./modules/service/service.routes.js";
 import ordersRoutes from "./modules/orders/orders.routes.js";
+import analyticsRoutes from "./modules/analytics/analytics.routes.js";
 import { handleCustomerScan } from "./modules/customer/customer.controller.js";
 
 // mergeParams: true to inherit :app from parent route
@@ -42,5 +43,8 @@ router.use("/service", serviceRoutes);
 
 // Orders (food orders: place + list; customer vs staff via app + ctx)
 router.use("/orders", ordersRoutes);
+
+// Analytics (manager hotel / founder chain – VIEW_HOTEL_REPORTS / VIEW_CHAIN_REPORTS)
+router.use("/analytics", analyticsRoutes);
 
 export default router;

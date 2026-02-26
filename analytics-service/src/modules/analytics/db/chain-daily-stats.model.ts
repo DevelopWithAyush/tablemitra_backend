@@ -21,6 +21,17 @@ export interface IChainDailyStats extends Document {
     rejectedOrders: number;
     rejectionRate: number;
     avgTimeToCompleteMinutes: number;
+    ordersByStatus: {
+      PENDING: number;
+      PREPARING: number;
+      SERVED: number;
+      REJECTED: number;
+      CANCELLED: number;
+    };
+    sumTimeToServeMinutes: number;
+    countServedOrders: number;
+    sumTimeToAcceptMinutes: number;
+    countAcceptedOrders: number;
   };
 
   service: {
@@ -66,6 +77,17 @@ const ChainDailyStatsSchema = new Schema<IChainDailyStats>(
       rejectedOrders: { type: Number, default: 0 },
       rejectionRate: { type: Number, default: 0 },
       avgTimeToCompleteMinutes: { type: Number, default: 0 },
+      ordersByStatus: {
+        PENDING: { type: Number, default: 0 },
+        PREPARING: { type: Number, default: 0 },
+        SERVED: { type: Number, default: 0 },
+        REJECTED: { type: Number, default: 0 },
+        CANCELLED: { type: Number, default: 0 },
+      },
+      sumTimeToServeMinutes: { type: Number, default: 0 },
+      countServedOrders: { type: Number, default: 0 },
+      sumTimeToAcceptMinutes: { type: Number, default: 0 },
+      countAcceptedOrders: { type: Number, default: 0 },
     },
 
     service: {

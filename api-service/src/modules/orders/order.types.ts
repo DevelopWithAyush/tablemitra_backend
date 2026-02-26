@@ -19,13 +19,17 @@ export interface PlaceOrderBody {
     roomNumber?: string;
     /** When true, staff places order for themselves (channel INTERNAL, source STAFF). */
     forStaff?: boolean;
+    /** Order-level free-text cooking request / special instructions. */
+    cookingRequest?: string;
 }
 
-/** List orders query: pagination + optional search. */
+/** List orders query: pagination + optional search + optional status filter. */
 export interface GetOrdersQuery {
     page?: number;
     limit?: number;
     search?: string;
+    /** Filter by order status. When omitted, default sort is PENDING → PREPARING → SERVED → REJECTED, then createdAt desc. */
+    status?: "PENDING" | "PREPARING" | "SERVED" | "REJECTED";
 }
 
 /** Role-based list result: customer sees hotel name/address; staff sees customer; admin sees both. */
@@ -49,6 +53,7 @@ export interface OrderListItem {
     tableNumber: string | null;
     zone: string | null;
     status: string;
+    cookingRequest: string | null;
     items: Array<{
         itemId: string;
         itemName: string;

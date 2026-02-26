@@ -27,6 +27,20 @@ export interface IHotelDailyStats extends Document {
     avgTimeToCompleteMinutes: number; // created → served
     peakHour: number;        // hour with most orders (0-23)
     lowestHour: number;      // hour with fewest orders (0-23)
+    /** Status counts for pie/breakdown. Updated on ORDER_CREATED + status-change events. */
+    ordersByStatus: {
+      PENDING: number;
+      PREPARING: number;
+      SERVED: number;
+      REJECTED: number;
+      CANCELLED: number;
+    };
+    /** For computing avgTimeToServe: sum of (servedAt - createdAt) in minutes. */
+    sumTimeToServeMinutes: number;
+    countServedOrders: number;
+    /** For computing avgTimeToAccept: sum of (acceptedAt - createdAt) in minutes. */
+    sumTimeToAcceptMinutes: number;
+    countAcceptedOrders: number;
   };
 
   service: {
@@ -81,6 +95,17 @@ const HotelDailyStatsSchema = new Schema<IHotelDailyStats>(
       avgTimeToCompleteMinutes: { type: Number, default: 0 },
       peakHour: { type: Number, default: 0 },
       lowestHour: { type: Number, default: 0 },
+      ordersByStatus: {
+        PENDING: { type: Number, default: 0 },
+        PREPARING: { type: Number, default: 0 },
+        SERVED: { type: Number, default: 0 },
+        REJECTED: { type: Number, default: 0 },
+        CANCELLED: { type: Number, default: 0 },
+      },
+      sumTimeToServeMinutes: { type: Number, default: 0 },
+      countServedOrders: { type: Number, default: 0 },
+      sumTimeToAcceptMinutes: { type: Number, default: 0 },
+      countAcceptedOrders: { type: Number, default: 0 },
     },
 
     service: {

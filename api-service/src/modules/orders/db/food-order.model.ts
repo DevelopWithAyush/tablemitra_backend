@@ -82,6 +82,17 @@ const FoodOrderSchema = new Schema(
             enum: ["PENDING", "PREPARING", "SERVED", "REJECTED"],
             default: "PENDING",
         },
+        /** Set when status moves to PREPARING (kitchen accepted). For analytics avgTimeToAccept. */
+        acceptedAt: { type: Date, default: null },
+        /** Set when status moves to SERVED. For analytics avgTimeToServe. */
+        servedAt: { type: Date, default: null },
+        /** Set when status moves to REJECTED. */
+        rejectedAt: { type: Date, default: null },
+        /** Order-level free-text cooking request / special instructions (e.g. "no onion", "less spicy"). */
+        cookingRequest: {
+            type: String,
+            default: null,
+        },
         items: [FoodOrderItemSchema],
         bill: {
             subtotal: { type: Number, required: true },

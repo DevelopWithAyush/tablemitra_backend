@@ -5,22 +5,34 @@ export const ANALYTICS_ORDER_EXCHANGE = "analytics.orders.exchange";
 export const ANALYTICS_ORDER_QUEUE = "analytics.orders.queue";
 const ROUTING_KEY = "food_order";
 
+export type FoodOrderAnalyticsEvent =
+    | "ORDER_CREATED"
+    | "ORDER_ACCEPTED"
+    | "ORDER_PREPARING"
+    | "ORDER_SERVED"
+    | "ORDER_REJECTED"
+    | "ORDER_CANCELLED";
+
 export interface FoodOrderAnalyticsPayload {
-    event: "ORDER_CREATED" | "ORDER_ACCEPTED" | "ORDER_REJECTED" | "ORDER_PREPARING" | "ORDER_SERVED" | "ORDER_CANCELLED";
+    event: FoodOrderAnalyticsEvent;
     orderId: string;
     hotelId: string;
     chainId?: string;
     source: "GUEST" | "STAFF_FOR_GUEST" | "STAFF";
     channelType: string;
-    /** Total revenue from this order (guest + staff-for-guest only; 0 for STAFF source). */
+    /** Total revenue from this order (guest + staff-for-guest only; 0 for STAFF source). Required for ORDER_CREATED. */
     amount: number;
-    /** Revenue from upsell items only (items with isUpsell: true). Sum of (discountedPrice ?? price) * quantity per upsell line. */
+    /** Revenue from upsell items only. Required for ORDER_CREATED. */
     upsellRevenue: number;
-    /** Total item count (sum of quantity across all items). For analytics totalItemsSold. */
+    /** Total item count (sum of quantity). Required for ORDER_CREATED. */
     totalItemsSold: number;
     createdAt: string; // ISO
-    /** Set when event is status change (e.g. ORDER_SERVED). */
-    servedAt?: string;
+    /** Status-change events: previous and new status for ordersByStatus + time metrics. */
+    previousStatus?: string;
+    newStatus?: string;
+    servedAt?: string; // ISO – for ORDER_SERVED, used for avgTimeToServe
+    acceptedAt?: string; // ISO – for ORDER_ACCEPTED/ORDER_PREPARING, used for avgTimeToAccept
+    rejectedAt?: string; // ISO – for ORDER_REJECTED
 }
 
 let queueSetup = false;
