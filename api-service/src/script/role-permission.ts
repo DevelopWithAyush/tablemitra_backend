@@ -134,6 +134,11 @@ const rolePermissionMap: Record<string, string[]> = {
         "CREATE_SERVICE",
         "UPDATE_SERVICE",
         "DELETE_SERVICE",
+        "ACCEPT_ORDER",
+        "CANCEL_ORDER",
+        "UPDATE_ORDER",
+        "EDIT_ORDER",
+        "REDIRECT_ORDER",
     ],
 
     KITCHEN: [

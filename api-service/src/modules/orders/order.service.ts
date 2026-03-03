@@ -1,3 +1,4 @@
+import { Types } from "mongoose";
 import FoodOrderModel, {
     type FoodOrderChannelType,
     type FoodOrderSourceType,
@@ -54,7 +55,52 @@ function validateChannelFields(params: CreateFoodOrderParams): void {
     }
 }
 
+/** Convert a single order doc to GET-order list item shape with customer enriched (for socket / staff view). */
+function orderDocToListItem(o: Record<string, unknown>): OrderListItem {
+    return {
+        _id: (o._id as { toString: () => string }).toString(),
+        hotelId: (o.hotelId as { toString: () => string }).toString(),
+        placedById: (o.placedById as { toString: () => string }).toString(),
+        source: o.source as string,
+        channelType: o.channelType as string,
+        customerId: o.customerId ? (o.customerId as { toString: () => string }).toString() : null,
+        roomSessionId: o.roomSessionId ? (o.roomSessionId as { toString: () => string }).toString() : null,
+        roomNumber: (o.roomNumber as string) ?? null,
+        tableNumber: (o.tableNumber as string) ?? null,
+        zone: (o.zone as string) ?? null,
+        status: o.status as string,
+        cookingRequest: (o.cookingRequest as string) ?? null,
+        items: (o.items as unknown[]) as OrderListItem["items"],
+        bill: o.bill as OrderListItem["bill"],
+        count: o.count as number,
+        paymentStatus: o.paymentStatus as string,
+        paidAt: (o.paidAt as Date) ?? null,
+        createdAt: (o.createdAt as Date)?.toISOString?.() ?? new Date(o.createdAt as Date).toISOString(),
+        updatedAt: (o.updatedAt as Date)?.toISOString?.() ?? new Date(o.updatedAt as Date).toISOString(),
+    };
+}
+
+/** Build GET-order list item from a single order (doc or plain) with customer enriched. For socket emit. */
+async function orderToListItemWithCustomer(
+    order: Record<string, unknown> | { toObject(): Record<string, unknown> }
+): Promise<OrderListItem> {
+    const o: Record<string, unknown> =
+        order && typeof (order as { toObject?: () => Record<string, unknown> }).toObject === "function"
+            ? (order as { toObject(): Record<string, unknown> }).toObject()
+            : (order as Record<string, unknown>);
+    const item = orderDocToListItem(o);
+    const customerId = item.customerId;
+    if (customerId) {
+        const profile = await authService.getCustomerProfileForOrder(customerId);
+        if (profile) item.customer = profile;
+        else item.customer = { userId: customerId, phone: "", profilePicture: null };
+    }
+    return item;
+}
+
 export const foodOrderService = {
+    orderToListItemWithCustomer,
+
     createFoodOrder: async (params: CreateFoodOrderParams) => {
         validateChannelFields(params);
         const { bill, count } = computeBillAndCount(params.items);
@@ -294,34 +340,58 @@ export const foodOrderService = {
 
         const total = await FoodOrderModel.countDocuments(filter);
 
-        const orders: Record<string, unknown>[] =
-            params.status != null
-                ? await FoodOrderModel.find(filter)
-                      .sort({ createdAt: -1 })
-                      .skip(skip)
-                      .limit(params.limit)
-                      .lean()
-                : await FoodOrderModel.aggregate([
-                      { $match: filter },
-                      {
-                          $addFields: {
-                              statusOrder: {
-                                  $switch: {
-                                      branches: [
-                                          { case: { $eq: ["$status", "PENDING"] }, then: 1 },
-                                          { case: { $eq: ["$status", "PREPARING"] }, then: 2 },
-                                          { case: { $eq: ["$status", "SERVED"] }, then: 3 },
-                                          { case: { $eq: ["$status", "REJECTED"] }, then: 4 },
-                                      ],
-                                      default: 5,
+        let orders: Record<string, unknown>[];
+        if (params.status != null) {
+            orders = await FoodOrderModel.find(filter)
+                .sort({ createdAt: -1 })
+                .skip(skip)
+                .limit(params.limit)
+                .lean();
+        } else {
+                      const aggFilter: Record<string, unknown> = {};
+                      if (filter.$or) {
+                          aggFilter.$or = (filter.$or as Array<Record<string, unknown>>).map((clause) => {
+                              const c = { ...clause };
+                              if (c.placedById != null) c.placedById = new Types.ObjectId(String(c.placedById));
+                              if (c.customerId != null) c.customerId = new Types.ObjectId(String(c.customerId));
+                              return c;
+                          });
+                      }
+                      if (filter.hotelId !== undefined) {
+                          if (filter.hotelId === null) {
+                              aggFilter.hotelId = null;
+                          } else if (typeof filter.hotelId === "object" && (filter.hotelId as Record<string, unknown>).$in) {
+                              const arr = (filter.hotelId as { $in: string[] }).$in;
+                              aggFilter.hotelId = { $in: arr.map((id) => new Types.ObjectId(id)) };
+                          } else {
+                              aggFilter.hotelId = new Types.ObjectId(String(filter.hotelId));
+                          }
+                      }
+                      if (filter._id !== undefined) aggFilter._id = filter._id;
+                      const andClause = filter.$and;
+                      if (Array.isArray(andClause) && andClause.length > 0) aggFilter.$and = andClause;
+                      orders = await FoodOrderModel.aggregate([
+                          { $match: aggFilter },
+                          {
+                              $addFields: {
+                                  statusOrder: {
+                                      $switch: {
+                                          branches: [
+                                              { case: { $eq: ["$status", "PENDING"] }, then: 1 },
+                                              { case: { $eq: ["$status", "PREPARING"] }, then: 2 },
+                                              { case: { $eq: ["$status", "SERVED"] }, then: 3 },
+                                              { case: { $eq: ["$status", "REJECTED"] }, then: 4 },
+                                          ],
+                                          default: 5,
+                                      },
                                   },
                               },
                           },
-                      },
-                      { $sort: { statusOrder: 1, createdAt: -1 } },
-                      { $skip: skip },
-                      { $limit: params.limit },
-                  ]);
+                          { $sort: { statusOrder: 1, createdAt: -1 } },
+                          { $skip: skip },
+                          { $limit: params.limit },
+                      ]);
+        }
 
         const list: OrderListItem[] = orders.map((o: Record<string, unknown>) => ({
             _id: (o._id as { toString: () => string }).toString(),
@@ -360,10 +430,15 @@ export const foodOrderService = {
             }
         } else if (view === "staff") {
             for (const uid of uniqueCustomerIds) {
-                const user = await authService.getUserById(uid);
-                const phone = user?.phone ?? "";
-                for (const o of list) {
-                    if (o.customerId === uid) o.customer = { userId: uid, phone };
+                const profile = await authService.getCustomerProfileForOrder(uid);
+                if (profile) {
+                    for (const o of list) {
+                        if (o.customerId === uid) o.customer = profile;
+                    }
+                } else {
+                    for (const o of list) {
+                        if (o.customerId === uid) o.customer = { userId: uid, phone: "", profilePicture: null };
+                    }
                 }
             }
         } else {
@@ -379,10 +454,15 @@ export const foodOrderService = {
                 }
             }
             for (const uid of uniqueCustomerIds) {
-                const user = await authService.getUserById(uid);
-                const phone = user?.phone ?? "";
-                for (const o of list) {
-                    if (o.customerId === uid) o.customer = { userId: uid, phone };
+                const profile = await authService.getCustomerProfileForOrder(uid);
+                if (profile) {
+                    for (const o of list) {
+                        if (o.customerId === uid) o.customer = profile;
+                    }
+                } else {
+                    for (const o of list) {
+                        if (o.customerId === uid) o.customer = { userId: uid, phone: "", profilePicture: null };
+                    }
                 }
             }
         }

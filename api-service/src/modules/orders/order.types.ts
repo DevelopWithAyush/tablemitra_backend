@@ -72,6 +72,11 @@ export interface OrderListItem {
     updatedAt: string;
     /** Populated for customer list: hotel name and address. */
     hotel?: { name: string; address: string };
-    /** Populated for staff/admin list: customer phone (and optionally name). */
-    customer?: { userId: string; phone: string };
+    /** Populated for staff/admin list (frontdesk, kitchen, etc.): customer user + profile (name, profile picture). */
+    customer?: {
+        userId: string;
+        phone: string;
+        name?: string;
+        profilePicture: string | null;
+    };
 }

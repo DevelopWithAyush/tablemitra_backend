@@ -9,6 +9,7 @@ import companyService from "../company/company.service.js";
 import hospitalityService from "../hospitality/hospitality.service.js";
 import { getUserPermissions } from "./admin/permission-cache.service.js";
 import { CustomerRoomContext, GetMeResult, IJwtPayload, SendOtpDTO, VerifyOtpDTO, VerifyOtpResult } from "./auth.types.js";
+import Attachment from "../attachments/db/attach.model.js";
 import Customer from "./db/customer-profile.model.js";
 import Role from "./db/role.model.js";
 import Session from "./db/sessions.model.js";
@@ -417,7 +418,7 @@ class AuthService {
             case "CUSTOMER": {
                 const profile = await Customer.findOne({ userId })
                     .select("-__v")
-                    .populate("profilePicture", "url type")
+                    .populate("profilePicture", "url fileType")
                     .lean();
 
                 if (!profile) {
@@ -498,7 +499,7 @@ class AuthService {
         await customer.save();
         const updated = await Customer.findOne({ userId })
             .select("-__v")
-            .populate("profilePicture", "url type")
+            .populate("profilePicture", "url fileType")
             .lean();
         return { success: true, profile: updated as Record<string, unknown> };
     };
@@ -886,6 +887,49 @@ class AuthService {
     getUserById = async (userId: string): Promise<{ _id: string; phone: string } | null> => {
         const user = await User.findById(userId).select("_id phone").lean();
         return user ? { _id: user._id.toString(), phone: user.phone } : null;
+    };
+
+    /**
+     * Get user phone + customer profile (name, profilePicture) for order list enrichment (staff/admin).
+     * Ensures Attachment model is used so populate works; falls back to direct fetch if populate didn't resolve.
+     */
+    getCustomerProfileForOrder = async (
+        userId: string
+    ): Promise<{
+        userId: string;
+        phone: string;
+        name?: string;
+        profilePicture: string | null;
+    } | null> => {
+        const user = await User.findById(userId).select("_id phone").lean();
+        if (!user) return null;
+        const profile = await Customer.findOne({ userId })
+            .select("name profilePicture")
+            .populate<{ profilePicture: { _id: unknown; url?: string; fileType?: string } | null }>("profilePicture", "url fileType")
+            .lean();
+        let profilePicture: string | null = null;
+        const rawPic = profile?.profilePicture;
+        if (rawPic) {
+            let url: string | undefined;
+            const hasUrl = typeof rawPic === "object" && rawPic !== null && "url" in rawPic && typeof (rawPic as { url: string }).url === "string";
+            if (hasUrl) {
+                url = (rawPic as { url: string }).url;
+            } else {
+                const idRaw = typeof rawPic === "object" && rawPic !== null && "_id" in rawPic
+                    ? (rawPic as { _id: unknown })._id
+                    : rawPic;
+                const attachmentId = idRaw != null ? String(idRaw) : "";
+                const attachment = attachmentId ? await Attachment.findById(attachmentId).select("url").lean() : null;
+                if (attachment?.url) url = attachment.url;
+            }
+            if (url) profilePicture = url;
+        }
+        return {
+            userId: user._id.toString(),
+            phone: user.phone,
+            name: profile?.name ?? undefined,
+            profilePicture,
+        };
     };
 }
 

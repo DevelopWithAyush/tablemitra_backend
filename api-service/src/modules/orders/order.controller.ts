@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { asyncHandler } from "../../utils/async-handler.js";
 import { IJwtPayload } from "../auth/auth.types.js";
 import { foodOrderService } from "./order.service.js";
+import { resolveFoodOrderTargetRoom } from "./order.routing.service.js";
 import type { OrderItemInput } from "./order.types.js";
 import { SocketDispatcher } from "../../infra/socket/socket.dispatcher.js";
 import { SOCKET_EVENTS } from "../../infra/socket/socket.events.js";
@@ -62,15 +63,20 @@ export class OrderController {
             upsellRevenue,
             totalItemsSold,
             createdAt: order.createdAt.toISOString(),
-        }).catch(() => {});
+        }).catch(() => { });
 
-        SocketDispatcher.emitToHotel(hotelId, SOCKET_EVENTS.FOOD_ORDER_CREATED, {
-            orderId,
-            roomSessionId: order.roomSessionId?.toString(),
-            roomNumber: order.roomNumber,
-            status: order.status,
-            source: order.source,
-        });
+        const [orderPayload, { department, room }] = await Promise.all([
+            foodOrderService.orderToListItemWithCustomer(order),
+            resolveFoodOrderTargetRoom(hotelId),
+        ]);
+
+        // Send new-order alert to the active department (KITCHEN → ROOM_SERVICE → FRONT_DESK)
+        SocketDispatcher.emitToDepartment(hotelId, department, SOCKET_EVENTS.FOOD_ORDER_ALERT, orderPayload);
+
+        // Also broadcast to the hotel-wide room so manager and other observers stay in sync
+        SocketDispatcher.emitToHotel(hotelId, SOCKET_EVENTS.FOOD_ORDER_CREATED, { ...orderPayload, _routedTo: department });
+
+        void room; // resolved room string available if needed for future use
 
         res.status(201).json({
             success: true,

@@ -133,8 +133,8 @@ paths:
       description: |
         Role-based listing and enrichment:
         - **Customer** (app=customer): Orders where placedById or customerId is the user. Response includes `hotel` (name, address) per order.
-        - **Staff** (hotel context): Orders for the staff's hotel (JWT ctx.id). Response includes `customer` (userId, phone) per order.
-        - **Admin/Chain** (chain context): Orders for hotels in the chain. Response includes `hotel` and `customer` per order.
+        - **Staff** (hotel context): Orders for the staff's hotel (JWT ctx.id). Response includes `customer` (userId, phone, name, profilePicture) per order.
+        - **Admin/Chain** (chain context): Orders for hotels in the chain. Response includes `hotel` and `customer` (with name and profile) per order.
         Pagination uses `page` and `limit`. `search` matches room number and table number (case-insensitive). Order identity is MongoDB `_id`.
       security:
         - BearerAuth: []
@@ -452,11 +452,16 @@ components:
             address: { type: string }
         customer:
           type: object
-          description: Present for staff and admin/chain list (userId, phone)
+          description: Present for staff and admin/chain list (frontdesk, kitchen). User id, phone, name and profile picture.
           nullable: true
           properties:
             userId: { type: string }
             phone: { type: string }
+            name: { type: string, description: "Customer display name" }
+            profilePicture:
+              type: string
+              nullable: true
+              description: Profile picture URL for display, or null if not set
 
     OrderError:
       type: object

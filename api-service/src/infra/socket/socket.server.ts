@@ -2,7 +2,8 @@ import cookie from "cookie";
 import { Server } from "socket.io";
 import http from "http";
 import { socketAuthMiddleware } from "./socket.auth.js";
-import { Rooms } from "./socket.rooms.js";
+import { Rooms, getDepartmentFromApp } from "./socket.rooms.js";
+import { onDepartmentConnected, onDepartmentDisconnecting } from "./presence.service.js";
 import logger from "../../helpers/logger/index.js";
 
 export let io: Server;
@@ -15,7 +16,7 @@ const CORS_ORIGINS = [
     process.env.ROOM_SERVICE_APP_URL,
 ].filter((url): url is string => Boolean(url));
 
-export const initSocket = (server: http.Server) => {
+export const initSocket = (server: http.Server): void => {
     io = new Server(server, {
         cors: {
             origin: CORS_ORIGINS.length > 0 ? CORS_ORIGINS : true,
@@ -25,33 +26,59 @@ export const initSocket = (server: http.Server) => {
 
     io.use(socketAuthMiddleware);
 
-    io.on("connection", (socket) => {
+    io.on("connection", async (socket) => {
         const user = socket.data.user;
         if (!user) {
             socket.disconnect(true);
             return;
         }
 
-        const userId = user.sub;
+        const userId: string = user.sub;
+        const app: string = user.app ?? "";
+        const hotelId: string | undefined = user.ctx?.type === "HOTEL" ? user.ctx.id : undefined;
+
+        // ── Personal room (DMs / targeted events) ──────────────────────────
         socket.join(Rooms.user(userId));
 
-        if (user.ctx?.type === "HOTEL" && user.ctx.id) {
-            socket.join(Rooms.hotel(user.ctx.id));
+        // ── Hotel staff ─────────────────────────────────────────────────────
+        if (hotelId) {
+            // Every hotel staff member joins the hotel-wide broadcast room
+            socket.join(Rooms.hotel(hotelId));
+
+            // Department staff additionally join their role-specific room
+            const dept = getDepartmentFromApp(app);
+            if (dept) {
+                socket.join(Rooms.hotelDepartment(hotelId, dept));
+                // Must be called AFTER join so the room size already includes this socket
+                await onDepartmentConnected(hotelId, dept);
+            }
         }
 
+        // ── Guest with active room session ──────────────────────────────────
         const cookieHeader = socket.handshake.headers.cookie;
-        if (typeof cookieHeader === "string" && user.app === "customer") {
+        if (typeof cookieHeader === "string" && app === "customer") {
             const parsed = cookie.parse(cookieHeader);
-            const hotelId = parsed.customer_room_hotel_id;
+            const guestHotelId = parsed.customer_room_hotel_id;
             const roomSessionId = parsed.customer_room_session_id;
-            if (hotelId) socket.join(Rooms.hotel(hotelId));
+            if (guestHotelId) socket.join(Rooms.hotel(guestHotelId));
             if (roomSessionId) socket.join(Rooms.room(roomSessionId));
         }
 
-        logger.info(`[Socket] Connected - socketId: ${socket.id}, userId: ${userId}, app: ${user.app}`);
+        logger.info(`[Socket] Connected  — id: ${socket.id} | userId: ${userId} | app: ${app}`);
+
+        // ── Presence: track when department panel goes offline ──────────────
+        // `disconnecting` fires before the socket leaves its rooms, so room sizes are still accurate
+        socket.on("disconnecting", async () => {
+            if (hotelId) {
+                const dept = getDepartmentFromApp(app);
+                if (dept) {
+                    await onDepartmentDisconnecting(hotelId, dept);
+                }
+            }
+        });
 
         socket.on("disconnect", (reason) => {
-            logger.info(`[Socket] Disconnected - socketId: ${socket.id}, reason: ${reason}`);
+            logger.info(`[Socket] Disconnected — id: ${socket.id} | reason: ${reason}`);
         });
     });
 };
