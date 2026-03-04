@@ -55,12 +55,15 @@ export const initSocket = (server: http.Server): void => {
         }
 
         // ── Guest with active room session ──────────────────────────────────
+        // Customers join hotel:{hotelId}:GUEST (guest-safe broadcasts: menu changes, etc.)
+        // and room:{roomSessionId} (their personal order status updates).
+        // They do NOT join hotel:{hotelId} — that room is staff-only.
         const cookieHeader = socket.handshake.headers.cookie;
         if (typeof cookieHeader === "string" && app === "customer") {
             const parsed = cookie.parse(cookieHeader);
             const guestHotelId = parsed.customer_room_hotel_id;
             const roomSessionId = parsed.customer_room_session_id;
-            if (guestHotelId) socket.join(Rooms.hotel(guestHotelId));
+            if (guestHotelId) socket.join(Rooms.hotelGuest(guestHotelId));
             if (roomSessionId) socket.join(Rooms.room(roomSessionId));
         }
 

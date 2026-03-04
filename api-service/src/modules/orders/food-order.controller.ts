@@ -1,13 +1,26 @@
 import { Request, Response } from "express";
 import { asyncHandler } from "../../utils/async-handler.js";
 import { IJwtPayload } from "../auth/auth.types.js";
-import { foodOrderService } from "./order.service.js";
+import { foodOrderService } from "./food-order.service.js";
 import { resolveFoodOrderTargetRoom } from "./order.routing.service.js";
-import type { OrderItemInput } from "./order.types.js";
+import type { OrderItemInput } from "./food-order.types.js";
 import { SocketDispatcher } from "../../infra/socket/socket.dispatcher.js";
 import { SOCKET_EVENTS } from "../../infra/socket/socket.events.js";
 import hospitalityService from "../hospitality/hospitality.service.js";
 import { publishFoodOrderEvent } from "./order.analytics.publisher.js";
+import { publishAuditEvent } from "../audit/audit.publisher.js";
+import type { ActorRole, AuditAction } from "../audit/audit.types.js";
+
+// Maps JWT app → ActorRole for audit events
+const APP_TO_ACTOR_ROLE: Record<string, ActorRole> = {
+    customer: "CUSTOMER",
+    manager: "MANAGER",
+    frontdesk: "FRONTDESK_STAFF",
+    kitchen: "KITCHEN_STAFF",
+    "room-service": "ROOM_SERVICE_STAFF",
+    founder: "FOUNDER",
+    admin: "ADMIN",
+};
 
 export class OrderController {
     placeOrder = asyncHandler(async (req: Request, res: Response) => {
@@ -63,20 +76,37 @@ export class OrderController {
             upsellRevenue,
             totalItemsSold,
             createdAt: order.createdAt.toISOString(),
-        }).catch(() => { });
+        }).catch(() => {});
+
+        publishAuditEvent(
+            "ORDER_CREATED",
+            "FOOD_ORDER",
+            orderId,
+            { userId: user.sub, role: APP_TO_ACTOR_ROLE[app] ?? "CUSTOMER" },
+            {
+                context: { hotelId, chainId, ip: req.ip, userAgent: req.get("User-Agent") ?? undefined, panel: app },
+                newData: {
+                    source: order.source,
+                    channelType: order.channelType,
+                    roomNumber: order.roomNumber ?? undefined,
+                    itemCount: totalItemsSold,
+                    totalAmount: amount,
+                },
+            }
+        ).catch(() => {});
 
         const [orderPayload, { department, room }] = await Promise.all([
             foodOrderService.orderToListItemWithCustomer(order),
             resolveFoodOrderTargetRoom(hotelId),
         ]);
 
-        // Send new-order alert to the active department (KITCHEN → ROOM_SERVICE → FRONT_DESK)
+        // Route new-order alert to the active department (KITCHEN → ROOM_SERVICE → FRONT_DESK)
         SocketDispatcher.emitToDepartment(hotelId, department, SOCKET_EVENTS.FOOD_ORDER_ALERT, orderPayload);
 
-        // Also broadcast to the hotel-wide room so manager and other observers stay in sync
+        // Broadcast to hotel-wide room so manager and all staff observers stay in sync
         SocketDispatcher.emitToHotel(hotelId, SOCKET_EVENTS.FOOD_ORDER_CREATED, { ...orderPayload, _routedTo: department });
 
-        void room; // resolved room string available if needed for future use
+        void room;
 
         res.status(201).json({
             success: true,
@@ -87,6 +117,7 @@ export class OrderController {
 
     updateOrderStatus = asyncHandler(async (req: Request, res: Response) => {
         const user = (req as any).user as IJwtPayload;
+        const app = (req.params.app as string) ?? "";
         const orderId = (req.params.orderId as string) ?? "";
         const { status } = req.body as { status: "PREPARING" | "SERVED" | "REJECTED" };
 
@@ -96,6 +127,51 @@ export class OrderController {
             ctxType: user.ctx?.type,
             ctxId: user.ctx?.id,
         });
+
+        if (order) {
+            const hotelId = (order.hotelId as { toString(): string }).toString();
+            const roomSessionId = order.roomSessionId
+                ? (order.roomSessionId as { toString(): string }).toString()
+                : null;
+            const customerId = order.customerId
+                ? (order.customerId as { toString(): string }).toString()
+                : null;
+
+            const statusEventMap: Record<string, string> = {
+                PREPARING: SOCKET_EVENTS.FOOD_ORDER_PREPARING,
+                SERVED: SOCKET_EVENTS.FOOD_ORDER_SERVED,
+                REJECTED: SOCKET_EVENTS.FOOD_ORDER_REJECTED,
+            };
+            const socketEvent = statusEventMap[status];
+            const statusPayload = { orderId, status, hotelId };
+
+            // 1. Notify all staff panels (manager, kitchen, frontdesk…)
+            SocketDispatcher.emitToHotel(hotelId, socketEvent, statusPayload);
+
+            // 2. Notify the customer
+            if (roomSessionId) {
+                SocketDispatcher.emitToRoom(roomSessionId, socketEvent, statusPayload);
+            } else if (customerId) {
+                SocketDispatcher.emitToUser(customerId, socketEvent, statusPayload);
+            }
+
+            // 3. Audit: record who changed the status and what it moved to
+            const auditActionMap: Record<string, AuditAction> = {
+                PREPARING: "ORDER_PREPARING",
+                SERVED: "ORDER_SERVED",
+                REJECTED: "ORDER_REJECTED",
+            };
+            publishAuditEvent(
+                auditActionMap[status],
+                "FOOD_ORDER",
+                orderId,
+                { userId: user.sub, role: APP_TO_ACTOR_ROLE[app] ?? "KITCHEN_STAFF" },
+                {
+                    context: { hotelId, ip: req.ip, userAgent: req.get("User-Agent") ?? undefined, panel: app },
+                    newData: { status },
+                }
+            ).catch(() => {});
+        }
 
         res.status(200).json({
             success: true,

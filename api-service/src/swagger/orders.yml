@@ -205,6 +205,253 @@ paths:
               schema:
                 $ref: "#/components/schemas/OrderError"
 
+  # ==================== PLACE SERVICE REQUEST ====================
+  /api/v1/{app}/orders/service:
+    post:
+      tags:
+        - Service Requests
+      summary: Place a service request
+      description: |
+        Single API for both customer and staff. Covers any room service type: laundry, housekeeping, amenities, etc.
+        - **Customer** (app=customer): Room context from cookies (`customer_room_hotel_id`, `customer_room_session_id`, `customer_room_room_number`). Do not send `roomNumber`.
+        - **Staff** (manager, frontdesk, room-service): Send `roomNumber` to place on behalf of a guest. Backend resolves the active room session.
+        Requires `CREATE_SERVICE_REQUEST` permission. Emits a `SERVICE_REQUEST_CREATED` socket alert routed to `ROOM_SERVICE` → `FRONT_DESK` based on panel presence.
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/OrdersAppParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - items
+              properties:
+                items:
+                  type: array
+                  minItems: 1
+                  items:
+                    $ref: "#/components/schemas/ServiceRequestItemInput"
+                roomNumber:
+                  type: string
+                  maxLength: 20
+                  description: "Required for staff placing on behalf of a guest. Ignored for customer."
+                note:
+                  type: string
+                  maxLength: 500
+                  description: "Optional free-text note from the guest (e.g. 'collect after 3pm')."
+            examples:
+              customerRequest:
+                summary: Customer places their own request (room from cookies)
+                description: Only itemId + quantity. Backend resolves name, category, and price from DB.
+                value:
+                  items:
+                    - itemId: "6990a1b9624644e833e5a32a"
+                      quantity: 2
+                    - itemId: "6990a6f7624644e833e5a44f"
+                      quantity: 3
+                  note: "Please collect at 3pm"
+              staffForGuest:
+                summary: Staff places request for a guest room
+                description: Only itemId + quantity. Send roomNumber so backend resolves the active room session.
+                value:
+                  items:
+                    - itemId: "6990a1b9624644e833e5a32a"
+                      quantity: 1
+                  roomNumber: "205"
+                  note: "Guest requested urgent delivery"
+      responses:
+        "201":
+          description: Service request created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "Service request created successfully"
+                  data:
+                    $ref: "#/components/schemas/ServiceRequest"
+        "400":
+          $ref: "#/components/responses/OrderBadRequest"
+        "401":
+          $ref: "#/components/responses/OrderUnauthorized"
+        "403":
+          $ref: "#/components/responses/OrderForbidden"
+
+  # ==================== GET SERVICE REQUESTS ====================
+    get:
+      tags:
+        - Service Requests
+      summary: Get service requests (paginated, filtered)
+      description: |
+        Role-based listing:
+        - **Customer** (app=customer): Requests placed by the caller. Response includes `hotel` (name, address).
+        - **Staff** (hotel context — frontdesk, room-service, manager): All requests for the staff's hotel. Response includes `customer` (userId, phone, name, profilePicture).
+        - **Admin/Chain**: Requests across all hotels in the chain. Response includes both `hotel` and `customer`.
+        Requires `VIEW_SERVICE_REQUEST` permission.
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/OrdersAppParam"
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: search
+          in: query
+          schema:
+            type: string
+            maxLength: 100
+          description: "Search by room number (case-insensitive)"
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [PENDING, ACCEPTED, IN_PROGRESS, COMPLETED, REJECTED, CANCELLED]
+          description: "Filter by request status. When omitted, all statuses are returned."
+      responses:
+        "200":
+          description: Paginated list of service requests
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      requests:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/ServiceRequestListItem"
+                      total:
+                        type: integer
+                        example: 42
+                      page:
+                        type: integer
+                        example: 1
+                      limit:
+                        type: integer
+                        example: 20
+                      hasMore:
+                        type: boolean
+                        example: true
+        "401":
+          $ref: "#/components/responses/OrderUnauthorized"
+        "403":
+          $ref: "#/components/responses/OrderForbidden"
+
+  # ==================== UPDATE SERVICE REQUEST STATUS ====================
+  /api/v1/{app}/orders/service/{requestId}/status:
+    patch:
+      tags:
+        - Service Requests
+      summary: Update service request status
+      description: |
+        Updates the status of a service request. Access control and valid transitions:
+        - **Customer**: May only move `PENDING → CANCELLED` on their own request.
+        - **Staff / Admin** (hotel or chain context): Full transition set below.
+
+        Valid transitions:
+        | From       | Allowed targets                        |
+        |------------|----------------------------------------|
+        | PENDING    | ACCEPTED, REJECTED, CANCELLED          |
+        | ACCEPTED   | IN_PROGRESS, REJECTED, CANCELLED       |
+        | IN_PROGRESS| COMPLETED, CANCELLED                   |
+
+        Emits a status-specific socket event to `hotel:{hotelId}` (staff) and `room:{roomSessionId}` (guest).
+        Publishes analytics and audit events for every transition.
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/OrdersAppParam"
+        - name: requestId
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: "^[0-9a-fA-F]{24}$"
+          description: Service request ID (MongoDB ObjectId)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - status
+              properties:
+                status:
+                  type: string
+                  enum: [ACCEPTED, IN_PROGRESS, COMPLETED, REJECTED, CANCELLED]
+                  description: "New status. Customer may only send CANCELLED."
+            examples:
+              accept:
+                summary: Staff accepts the request
+                value: { status: "ACCEPTED" }
+              startWork:
+                summary: Staff marks it in progress
+                value: { status: "IN_PROGRESS" }
+              complete:
+                summary: Staff completes the request
+                value: { status: "COMPLETED" }
+              reject:
+                summary: Staff rejects the request
+                value: { status: "REJECTED" }
+              guestCancel:
+                summary: Guest cancels a pending request
+                value: { status: "CANCELLED" }
+      responses:
+        "200":
+          description: Status updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "Service request status updated"
+                  data:
+                    $ref: "#/components/schemas/ServiceRequest"
+        "400":
+          $ref: "#/components/responses/OrderBadRequest"
+        "401":
+          $ref: "#/components/responses/OrderUnauthorized"
+        "403":
+          $ref: "#/components/responses/OrderForbidden"
+        "404":
+          description: Service request not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrderError"
+
   # ==================== UPDATE ORDER STATUS ====================
   /api/v1/{app}/orders/food/{orderId}/status:
     patch:
@@ -463,6 +710,154 @@ components:
               nullable: true
               description: Profile picture URL for display, or null if not set
 
+    # ── Service Request schemas ───────────────────────────────────────────────
+
+    ServiceRequestItemInput:
+      type: object
+      description: |
+        Line item sent by the client — only `itemId` and `quantity`.
+        The backend resolves `itemName`, `categoryId`, `categoryName`, and `price` from the DB
+        to prevent price manipulation. Items that do not exist, do not belong to this hotel,
+        or have `isActive: false` are rejected with a 400 error.
+      required:
+        - itemId
+        - quantity
+      properties:
+        itemId:
+          type: string
+          pattern: "^[0-9a-fA-F]{24}$"
+          description: Service item ID (MongoDB ObjectId)
+        quantity:
+          type: integer
+          minimum: 1
+          description: Number of units
+
+    ServiceRequestItemResolved:
+      type: object
+      description: Fully-resolved item stored in the DB after the backend enriches it from ServiceItem.
+      properties:
+        itemId: { type: string }
+        itemName: { type: string }
+        categoryId: { type: string }
+        categoryName: { type: string }
+        price: { type: number }
+        quantity: { type: integer, minimum: 1 }
+
+    ServiceRequest:
+      type: object
+      description: Full service request document returned after create / status update.
+      properties:
+        _id:
+          type: string
+          description: Request ID (MongoDB ObjectId)
+        userId:
+          type: string
+          description: Guest who placed the request
+        hotelId:
+          type: string
+        roomSessionId:
+          type: string
+        roomNumber:
+          type: string
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ServiceRequestItemResolved"
+        totalAmount:
+          type: number
+          description: Sum of (price × quantity) for all items, computed server-side from DB prices
+        note:
+          type: string
+          nullable: true
+          description: "Optional guest note (e.g. 'collect after 3pm')"
+        status:
+          type: string
+          enum: [PENDING, ACCEPTED, IN_PROGRESS, COMPLETED, REJECTED, CANCELLED]
+        paymentStatus:
+          type: string
+          enum: [PENDING, PAID, REFUNDED]
+        paidAt:
+          type: string
+          format: date-time
+          nullable: true
+        acceptedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Set when staff moves status to ACCEPTED
+        startedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Set when staff moves status to IN_PROGRESS
+        completedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Set when staff marks COMPLETED
+        rejectedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Set when staff moves to REJECTED
+        cancelledAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Set when cancelled (staff or guest)
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    ServiceRequestListItem:
+      type: object
+      description: Service request list item with optional hotel/customer enrichment by role.
+      properties:
+        _id: { type: string }
+        userId: { type: string }
+        hotelId: { type: string }
+        roomSessionId: { type: string }
+        roomNumber: { type: string }
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ServiceRequestItemResolved"
+        totalAmount: { type: number }
+        note: { type: string, nullable: true }
+        status:
+          type: string
+          enum: [PENDING, ACCEPTED, IN_PROGRESS, COMPLETED, REJECTED, CANCELLED]
+        paymentStatus: { type: string }
+        paidAt: { type: string, format: date-time, nullable: true }
+        acceptedAt: { type: string, format: date-time, nullable: true }
+        startedAt: { type: string, format: date-time, nullable: true }
+        completedAt: { type: string, format: date-time, nullable: true }
+        rejectedAt: { type: string, format: date-time, nullable: true }
+        cancelledAt: { type: string, format: date-time, nullable: true }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        hotel:
+          type: object
+          nullable: true
+          description: "Present for customer view: hotel name and address"
+          properties:
+            name: { type: string }
+            address: { type: string }
+        customer:
+          type: object
+          nullable: true
+          description: "Present for staff/admin view: guest who placed the request"
+          properties:
+            userId: { type: string }
+            phone: { type: string }
+            name: { type: string }
+            profilePicture: { type: string, nullable: true, description: "Profile picture URL or null" }
+
+    # ── Shared error schema ───────────────────────────────────────────────────
+
     OrderError:
       type: object
       properties:
@@ -472,3 +867,23 @@ components:
         message:
           type: string
           example: "Room context required. Please scan room QR or ensure cookies are set."
+
+  responses:
+    OrderBadRequest:
+      description: Bad request (validation error or invalid state transition)
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/OrderError"
+    OrderUnauthorized:
+      description: Unauthorized – missing or invalid token
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/OrderError"
+    OrderForbidden:
+      description: Forbidden – insufficient permissions or wrong hotel/chain context
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/OrderError"

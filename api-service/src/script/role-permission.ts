@@ -40,7 +40,7 @@ const rolePermissionMap: Record<string, string[]> = {
         "UPDATE_ORDER", "EDIT_ORDER", "REDIRECT_ORDER",
 
         "CREATE_SERVICE_REQUEST", "VIEW_SERVICE_REQUEST",
-        "ACCEPT_SERVICE_REQUEST", "CANCEL_SERVICE_REQUEST",
+        "ACCEPT_SERVICE_REQUEST", "UPDATE_SERVICE_REQUEST", "CANCEL_SERVICE_REQUEST",
 
         "OPEN_KITCHEN_PANEL", "CLOSE_KITCHEN_PANEL",
         "OPEN_ROOM_SERVICE_PANEL", "CLOSE_ROOM_SERVICE_PANEL",
@@ -139,6 +139,11 @@ const rolePermissionMap: Record<string, string[]> = {
         "UPDATE_ORDER",
         "EDIT_ORDER",
         "REDIRECT_ORDER",
+        "CREATE_SERVICE_REQUEST",
+        "VIEW_SERVICE_REQUEST",
+        "ACCEPT_SERVICE_REQUEST",
+        "UPDATE_SERVICE_REQUEST",
+        "CANCEL_SERVICE_REQUEST",
     ],
 
     KITCHEN: [
@@ -163,6 +168,11 @@ const rolePermissionMap: Record<string, string[]> = {
         "CREATE_SERVICE",
         "UPDATE_SERVICE",
         "DELETE_SERVICE",
+        "CREATE_SERVICE_REQUEST",
+        "VIEW_SERVICE_REQUEST",
+        "ACCEPT_SERVICE_REQUEST",
+        "UPDATE_SERVICE_REQUEST",
+        "CANCEL_SERVICE_REQUEST",
     ],
 
     CUSTOMER: [
@@ -171,7 +181,9 @@ const rolePermissionMap: Record<string, string[]> = {
         "CREATE_ORDER",
         "VIEW_ORDER",
         "CREATE_ATTACHMENT",
-        
+        "CREATE_SERVICE_REQUEST",
+        "VIEW_SERVICE_REQUEST",
+        "CANCEL_SERVICE_REQUEST",
     ]
 };
 

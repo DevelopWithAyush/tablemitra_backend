@@ -3,7 +3,7 @@ import FoodOrderModel, {
     type FoodOrderChannelType,
     type FoodOrderSourceType,
 } from "./db/food-order.model.js";
-import type { OrderItemInput, OrderListResponse, OrderListItem } from "./order.types.js";
+import type { OrderItemInput, OrderListResponse, OrderListItem } from "./food-order.types.js";
 import hospitalityService from "../hospitality/hospitality.service.js";
 import authService from "../auth/auth.service.js";
 import { publishFoodOrderEvent } from "./order.analytics.publisher.js";

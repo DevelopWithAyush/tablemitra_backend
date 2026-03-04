@@ -83,6 +83,7 @@ export const permissions = [
     { key: "CREATE_SERVICE_REQUEST", description: "Create room-service request" },
     { key: "VIEW_SERVICE_REQUEST", description: "View room-service requests" },
     { key: "ACCEPT_SERVICE_REQUEST", description: "Accept room-service request" },
+    { key: "UPDATE_SERVICE_REQUEST", description: "Update room-service request status (in-progress, complete, reject)" },
     { key: "CANCEL_SERVICE_REQUEST", description: "Cancel room-service request" },
 
     // ===== PANEL CONTROLS =====
