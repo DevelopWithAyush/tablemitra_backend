@@ -1,4 +1,148 @@
 paths:
+  # ==================== ACTIVE ORDERS — BOTTOM BAR SUMMARY ====================
+  /api/v1/{app}/orders/active:
+    get:
+      tags:
+        - Active Orders
+      summary: Bottom-bar summary of all active orders (customer only)
+      description: |
+        Returns the minimum data needed to render the bottom tracking bar.
+        - **Food orders** with status `PENDING` or `PREPARING`
+        - **Service requests** with status `PENDING`, `ACCEPTED`, or `IN_PROGRESS`
+
+        Only `_id`, `status`, and `createdAt` are returned per entry — no item lists.
+        The frontend uses this once on load; afterwards all status changes arrive via
+        socket events (`food.order.preparing`, `service.request.accepted`, etc.) so no
+        polling is required.
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/OrdersAppParam"
+      responses:
+        "200":
+          description: Active order summary
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      foodOrders:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/ActiveFoodOrderSummary"
+                      serviceRequests:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/ActiveServiceRequestSummary"
+              example:
+                success: true
+                data:
+                  foodOrders:
+                    - _id: "abc123"
+                      status: "PREPARING"
+                      createdAt: "2025-01-01T10:00:00.000Z"
+                    - _id: "abc124"
+                      status: "PENDING"
+                      createdAt: "2025-01-01T10:05:00.000Z"
+                  serviceRequests:
+                    - _id: "def456"
+                      status: "IN_PROGRESS"
+                      createdAt: "2025-01-01T10:02:00.000Z"
+        "401":
+          $ref: "#/components/responses/OrderUnauthorized"
+
+  # ==================== ACTIVE FOOD ORDERS — STATUS PAGE ====================
+  /api/v1/{app}/orders/food/active:
+    get:
+      tags:
+        - Active Orders
+      summary: Full active food orders for the status carousel (customer only)
+      description: |
+        Returns complete data for all active food orders (`PENDING` | `PREPARING`)
+        so the status page can render a per-order carousel with progress animations.
+
+        - Sorted **oldest-first** so the first order placed appears first in the carousel.
+        - Includes item names, bill totals, hotel name/address, and `acceptedAt` timestamp.
+        - No pagination — a customer will rarely have more than 2-3 active orders at once.
+
+        **Animation states the frontend should drive:**
+        - `PENDING` → pulse / waiting animation
+        - `PREPARING` → progress / cooking animation
+        - Terminal (`SERVED`, `REJECTED`) → card disappears (driven by socket event)
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/OrdersAppParam"
+      responses:
+        "200":
+          description: Active food orders for carousel
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ActiveFoodOrder"
+        "401":
+          $ref: "#/components/responses/OrderUnauthorized"
+
+  # ==================== ACTIVE SERVICE REQUESTS — STATUS PAGE ====================
+  /api/v1/{app}/orders/service/active:
+    get:
+      tags:
+        - Active Orders
+      summary: Full active service requests for the status carousel (customer only)
+      description: |
+        Returns complete data for all active service requests
+        (`PENDING` | `ACCEPTED` | `IN_PROGRESS`) so the status page can render a
+        per-request carousel with progress animations.
+
+        - Sorted **oldest-first** so the earliest request appears first in the carousel.
+        - Includes item names (with category for grouping), hotel name/address,
+          `acceptedAt`, and `startedAt` timestamps.
+        - No pagination — a customer rarely has many concurrent service requests.
+
+        **Animation states the frontend should drive:**
+        - `PENDING` → pulse / waiting animation
+        - `ACCEPTED` → accepted / confirmed animation
+        - `IN_PROGRESS` → spinner / active animation
+        - Terminal (`COMPLETED`, `REJECTED`, `CANCELLED`) → card disappears (driven by socket event)
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/OrdersAppParam"
+      responses:
+        "200":
+          description: Active service requests for carousel
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ActiveServiceRequest"
+        "401":
+          $ref: "#/components/responses/OrderUnauthorized"
+
   # ==================== PLACE FOOD ORDER ====================
   /api/v1/{app}/orders/food:
     post:
@@ -709,6 +853,103 @@ components:
               type: string
               nullable: true
               description: Profile picture URL for display, or null if not set
+
+    # ── Active order schemas (bottom bar + status pages) ─────────────────────
+
+    ActiveFoodOrderSummary:
+      type: object
+      description: Minimal food order entry for the bottom tracking bar.
+      properties:
+        _id: { type: string, description: "Food order ID" }
+        status:
+          type: string
+          enum: [PENDING, PREPARING]
+        createdAt: { type: string, format: date-time }
+
+    ActiveServiceRequestSummary:
+      type: object
+      description: Minimal service request entry for the bottom tracking bar.
+      properties:
+        _id: { type: string, description: "Service request ID" }
+        status:
+          type: string
+          enum: [PENDING, ACCEPTED, IN_PROGRESS]
+        createdAt: { type: string, format: date-time }
+
+    ActiveFoodOrder:
+      type: object
+      description: Full food order data for the status page carousel.
+      properties:
+        _id: { type: string }
+        status:
+          type: string
+          enum: [PENDING, PREPARING]
+        channelType:
+          type: string
+          enum: [ROOM, RESTAURANT, BAR, INTERNAL]
+        roomNumber: { type: string, nullable: true }
+        cookingRequest: { type: string, nullable: true }
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              itemName: { type: string }
+              quantity: { type: integer, minimum: 1 }
+              variantName: { type: string, description: "Present only when a variant was selected" }
+        bill:
+          type: object
+          properties:
+            subtotal: { type: number }
+            toPay: { type: number }
+        count: { type: integer, description: "Total number of items (sum of quantity)" }
+        acceptedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: "Set when kitchen moves status to PREPARING"
+        createdAt: { type: string, format: date-time }
+        hotel:
+          type: object
+          properties:
+            name: { type: string }
+            address: { type: string }
+
+    ActiveServiceRequest:
+      type: object
+      description: Full service request data for the status page carousel.
+      properties:
+        _id: { type: string }
+        status:
+          type: string
+          enum: [PENDING, ACCEPTED, IN_PROGRESS]
+        roomNumber: { type: string }
+        note: { type: string, nullable: true }
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              itemName: { type: string }
+              categoryName: { type: string, description: "Use this to group items on the UI" }
+              quantity: { type: integer, minimum: 1 }
+        totalAmount: { type: number }
+        acceptedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: "Set when staff moves status to ACCEPTED"
+        startedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: "Set when staff moves status to IN_PROGRESS"
+        createdAt: { type: string, format: date-time }
+        hotel:
+          type: object
+          properties:
+            name: { type: string }
+            address: { type: string }
 
     # ── Service Request schemas ───────────────────────────────────────────────
 

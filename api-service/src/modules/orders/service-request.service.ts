@@ -1,6 +1,14 @@
 import { Types } from "mongoose";
 import ServiceRequestModel, { type ServiceRequestStatus } from "./db/service-request.model.js";
-import type { ServiceRequestListItem, ServiceRequestListResponse } from "./service-request.types.js";
+import {
+    ACTIVE_SERVICE_REQUEST_STATUSES,
+} from "./service-request.types.js";
+import type {
+    ServiceRequestListItem,
+    ServiceRequestListResponse,
+    ActiveServiceRequestSummary,
+    ActiveServiceRequest,
+} from "./service-request.types.js";
 import { ServiceItemModel } from "../service/db/item.model.js";
 import { ServiceCategoryModel } from "../service/db/category.model.js";
 import hospitalityService from "../hospitality/hospitality.service.js";
@@ -349,5 +357,73 @@ export const serviceRequestService = {
 
         await ServiceRequestModel.findByIdAndUpdate(params.requestId, { $set: update });
         return ServiceRequestModel.findById(params.requestId).lean();
+    },
+
+    /**
+     * Bottom-bar summary: IDs + statuses of all active service requests for this customer.
+     * Intentionally slim — no item list, no hotel enrichment.
+     */
+    getActiveServiceRequestsSummary: async (userId: string): Promise<ActiveServiceRequestSummary[]> => {
+        const docs = await ServiceRequestModel.find({
+            userId,
+            status: { $in: ACTIVE_SERVICE_REQUEST_STATUSES as unknown as string[] },
+        })
+            .select("_id status createdAt")
+            .sort({ createdAt: 1 })
+            .lean();
+
+        return docs.map((d) => ({
+            _id: (d._id as { toString(): string }).toString(),
+            status: d.status as ActiveServiceRequestSummary["status"],
+            createdAt: (d.createdAt as Date).toISOString(),
+        }));
+    },
+
+    /**
+     * Status page: full active service requests for the carousel view.
+     * Sorted oldest-first so the earliest request appears first in the carousel.
+     * Enriched with hotel name and address for display.
+     */
+    getActiveServiceRequests: async (userId: string): Promise<ActiveServiceRequest[]> => {
+        const docs = await ServiceRequestModel.find({
+            userId,
+            status: { $in: ACTIVE_SERVICE_REQUEST_STATUSES as unknown as string[] },
+        })
+            .select("_id status roomNumber note items totalAmount acceptedAt startedAt createdAt hotelId")
+            .sort({ createdAt: 1 })
+            .lean();
+
+        // Batch hotel enrichment — one call per unique hotel
+        const uniqueHotelIds = [...new Set(docs.map((d) => (d.hotelId as { toString(): string }).toString()))];
+        const hotelMap = new Map<string, { name: string; address: string }>();
+        for (const hotelId of uniqueHotelIds) {
+            const res = await hospitalityService.getHotelContextForCustomer(hotelId);
+            hotelMap.set(hotelId, {
+                name: res.success && res.data ? res.data.name : "",
+                address: res.success && res.data ? res.data.address : "",
+            });
+        }
+
+        return docs.map((d) => {
+            const hotelId = (d.hotelId as { toString(): string }).toString();
+            const rawItems = (d.items as Array<{ itemName: string; categoryName: string; quantity: number }>) ?? [];
+
+            return {
+                _id: (d._id as { toString(): string }).toString(),
+                status: d.status as ActiveServiceRequest["status"],
+                roomNumber: d.roomNumber as string,
+                note: (d.note as string) ?? null,
+                items: rawItems.map((i) => ({
+                    itemName: i.itemName,
+                    categoryName: i.categoryName,
+                    quantity: i.quantity,
+                })),
+                totalAmount: d.totalAmount as number,
+                acceptedAt: d.acceptedAt ? (d.acceptedAt as Date).toISOString() : null,
+                startedAt: d.startedAt ? (d.startedAt as Date).toISOString() : null,
+                createdAt: (d.createdAt as Date).toISOString(),
+                hotel: hotelMap.get(hotelId) ?? { name: "", address: "" },
+            };
+        });
     },
 };

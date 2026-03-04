@@ -3,7 +3,16 @@ import FoodOrderModel, {
     type FoodOrderChannelType,
     type FoodOrderSourceType,
 } from "./db/food-order.model.js";
-import type { OrderItemInput, OrderListResponse, OrderListItem } from "./food-order.types.js";
+import {
+    ACTIVE_FOOD_ORDER_STATUSES,
+} from "./food-order.types.js";
+import type {
+    OrderItemInput,
+    OrderListResponse,
+    OrderListItem,
+    ActiveFoodOrderSummary,
+    ActiveFoodOrder,
+} from "./food-order.types.js";
 import hospitalityService from "../hospitality/hospitality.service.js";
 import authService from "../auth/auth.service.js";
 import { publishFoodOrderEvent } from "./order.analytics.publisher.js";
@@ -474,5 +483,75 @@ export const foodOrderService = {
             limit: params.limit,
             hasMore: skip + list.length < total,
         };
+    },
+
+    /**
+     * Bottom-bar summary: IDs + statuses of all active food orders for this customer.
+     * Intentionally slim — no item list, no hotel enrichment.
+     */
+    getActiveFoodOrdersSummary: async (userId: string): Promise<ActiveFoodOrderSummary[]> => {
+        const docs = await FoodOrderModel.find({
+            $or: [{ placedById: userId }, { customerId: userId }],
+            status: { $in: ACTIVE_FOOD_ORDER_STATUSES as unknown as string[] },
+        })
+            .select("_id status createdAt")
+            .sort({ createdAt: 1 })
+            .lean();
+
+        return docs.map((d) => ({
+            _id: (d._id as { toString(): string }).toString(),
+            status: d.status as ActiveFoodOrderSummary["status"],
+            createdAt: (d.createdAt as Date).toISOString(),
+        }));
+    },
+
+    /**
+     * Status page: full active food orders for the carousel view.
+     * Sorted oldest-first so the earliest order appears first in the carousel.
+     * Enriched with hotel name and address for display.
+     */
+    getActiveFoodOrders: async (userId: string): Promise<ActiveFoodOrder[]> => {
+        const docs = await FoodOrderModel.find({
+            $or: [{ placedById: userId }, { customerId: userId }],
+            status: { $in: ACTIVE_FOOD_ORDER_STATUSES as unknown as string[] },
+        })
+            .select("_id status channelType roomNumber cookingRequest items bill count acceptedAt createdAt hotelId")
+            .sort({ createdAt: 1 })
+            .lean();
+
+        // Batch hotel enrichment — one call per unique hotel
+        const uniqueHotelIds = [...new Set(docs.map((d) => (d.hotelId as { toString(): string }).toString()))];
+        const hotelMap = new Map<string, { name: string; address: string }>();
+        for (const hotelId of uniqueHotelIds) {
+            const res = await hospitalityService.getHotelContextForCustomer(hotelId);
+            hotelMap.set(hotelId, {
+                name: res.success && res.data ? res.data.name : "",
+                address: res.success && res.data ? res.data.address : "",
+            });
+        }
+
+        return docs.map((d) => {
+            const hotelId = (d.hotelId as { toString(): string }).toString();
+            const rawItems = (d.items as Array<{ itemName: string; quantity: number; variantName?: string }>) ?? [];
+            const bill = d.bill as { subtotal: number; toPay: number };
+
+            return {
+                _id: (d._id as { toString(): string }).toString(),
+                status: d.status as ActiveFoodOrder["status"],
+                channelType: d.channelType as string,
+                roomNumber: (d.roomNumber as string) ?? null,
+                cookingRequest: (d.cookingRequest as string) ?? null,
+                items: rawItems.map((i) => ({
+                    itemName: i.itemName,
+                    quantity: i.quantity,
+                    ...(i.variantName ? { variantName: i.variantName } : {}),
+                })),
+                bill: { subtotal: bill.subtotal, toPay: bill.toPay },
+                count: d.count as number,
+                acceptedAt: d.acceptedAt ? (d.acceptedAt as Date).toISOString() : null,
+                createdAt: (d.createdAt as Date).toISOString(),
+                hotel: hotelMap.get(hotelId) ?? { name: "", address: "" },
+            };
+        });
     },
 };

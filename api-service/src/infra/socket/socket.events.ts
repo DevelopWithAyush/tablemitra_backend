@@ -9,12 +9,14 @@ export const SOCKET_EVENTS = {
     FOOD_ORDER_CANCELLED: "food.order.cancelled",
     FOOD_ORDER_EDITED: "food.order.edited", 
 
+    SERVICE_REQUEST_ALERT: "service.request.alert",
     SERVICE_REQUEST_CREATED: "service.request.created",
     SERVICE_REQUEST_ACCEPTED: "service.request.accepted",
     SERVICE_REQUEST_IN_PROGRESS: "service.request.in_progress",
     SERVICE_REQUEST_COMPLETED: "service.request.completed",
     SERVICE_REQUEST_REJECTED: "service.request.rejected",
-    SERVICE_REQUEST_CANCELLED: "service.request.cancelled",
+    SERVICE_REQUEST_CANCELLED: "service.request.cancelled", 
+    
 
     MENU_ITEM_CLOSED: "menu.item.closed",
     MENU_ITEM_OPENED: "menu.item.opened",

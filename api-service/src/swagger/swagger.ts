@@ -44,6 +44,7 @@ const options: swaggerJsdoc.Options = {
             { name: "Service - Full Catalog", description: "Full service catalog with nested structure" },
             { name: "Orders", description: "Food orders – place order (customer/staff) and list with pagination & search" },
             { name: "Service Requests", description: "Service requests (laundry, housekeeping, amenities, etc.) – place, list, and update status" },
+            { name: "Active Orders", description: "Customer active-order tracking – bottom bar summary and full status carousel for food orders and service requests" },
         ],
         components: {
             schemas: {

@@ -232,7 +232,7 @@ class AuthService {
             return { success: false, message: "Invalid app" };
         }
 
-        const otp = phone === "+917572077736" || phone === "+919311541405" || phone === "+919696174820" ? "1111" : generateOtp();
+        const otp = phone === "+917572077736" || phone === "+919311541405" || phone === "+919696174820" || phone === "+918941914392" ? "1111" : generateOtp();
 
         if (app === "customer") {
             const result = await runInTransaction(async (session) => {

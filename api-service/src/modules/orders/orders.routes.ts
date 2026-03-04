@@ -10,12 +10,20 @@ import {
     GetServiceRequestsValidation,
     UpdateServiceRequestStatusValidation,
 } from "./service-request.validator.js";
+import { ActiveOrdersController } from "./active-orders.controller.js";
 
 const orderController = new OrderController();
 const serviceRequestController = new ServiceRequestController();
+const activeOrdersController = new ActiveOrdersController();
 const ordersRoutes = Router({ mergeParams: true });
 
 ordersRoutes.use(authMiddleware);
+
+// ── Active orders (bottom bar + status pages) — registered first to avoid
+//   conflicts with future /food/:orderId or /service/:requestId routes ────────
+ordersRoutes.get("/active", activeOrdersController.getActiveSummary);
+ordersRoutes.get("/food/active", activeOrdersController.getActiveFoodOrders);
+ordersRoutes.get("/service/active", activeOrdersController.getActiveServiceRequests);
 
 // ── Food orders ───────────────────────────────────────────────────────────────
 ordersRoutes.post("/food", validate(PlaceOrderValidation), orderController.placeOrder);

@@ -1,3 +1,37 @@
+// ── Active service request types (bottom bar + status page) ──────────────────
+
+export const ACTIVE_SERVICE_REQUEST_STATUSES = ["PENDING", "ACCEPTED", "IN_PROGRESS"] as const;
+export type ActiveServiceRequestStatus = (typeof ACTIVE_SERVICE_REQUEST_STATUSES)[number];
+
+/** Minimal shape returned for the bottom bar — no item list, no hotel name. */
+export interface ActiveServiceRequestSummary {
+    _id: string;
+    status: ActiveServiceRequestStatus;
+    createdAt: string;
+}
+
+/** Full shape returned for the service-request status page carousel. */
+export interface ActiveServiceRequest {
+    _id: string;
+    status: ActiveServiceRequestStatus;
+    roomNumber: string;
+    note: string | null;
+    items: Array<{
+        itemName: string;
+        categoryName: string;
+        quantity: number;
+    }>;
+    totalAmount: number;
+    /** Set when staff moves to ACCEPTED. */
+    acceptedAt: string | null;
+    /** Set when staff moves to IN_PROGRESS. */
+    startedAt: string | null;
+    createdAt: string;
+    hotel: { name: string; address: string };
+}
+
+// ── Placement types ───────────────────────────────────────────────────────────
+
 /** What the client sends — only identity + quantity. Everything else comes from DB. */
 export interface ServiceRequestItemInput {
     itemId: string;

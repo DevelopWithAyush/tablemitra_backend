@@ -2,6 +2,38 @@
  * Order module types. Response shapes and filters stay here; no cross-module model imports.
  */
 
+// ── Active food order types (bottom bar + status page) ───────────────────────
+
+export const ACTIVE_FOOD_ORDER_STATUSES = ["PENDING", "PREPARING"] as const;
+export type ActiveFoodOrderStatus = (typeof ACTIVE_FOOD_ORDER_STATUSES)[number];
+
+/** Minimal shape returned for the bottom bar — no item list, no hotel name. */
+export interface ActiveFoodOrderSummary {
+    _id: string;
+    status: ActiveFoodOrderStatus;
+    createdAt: string;
+}
+
+/** Full shape returned for the food-order status page carousel. */
+export interface ActiveFoodOrder {
+    _id: string;
+    status: ActiveFoodOrderStatus;
+    channelType: string;
+    roomNumber: string | null;
+    cookingRequest: string | null;
+    items: Array<{
+        itemName: string;
+        quantity: number;
+        variantName?: string;
+    }>;
+    bill: { subtotal: number; toPay: number };
+    count: number;
+    /** Set when kitchen moves status to PREPARING. */
+    acceptedAt: string | null;
+    createdAt: string;
+    hotel: { name: string; address: string };
+}
+
 export interface OrderItemInput {
     itemId: string;
     itemName: string;

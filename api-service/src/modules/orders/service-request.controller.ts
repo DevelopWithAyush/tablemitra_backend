@@ -93,7 +93,7 @@ export class ServiceRequestController {
             resolveServiceRequestTargetRoom(hotelId),
         ]);
 
-        SocketDispatcher.emitToDepartment(hotelId, department, SOCKET_EVENTS.SERVICE_REQUEST_CREATED, requestPayload);
+        SocketDispatcher.emitToDepartment(hotelId, department, SOCKET_EVENTS.SERVICE_REQUEST_ALERT, requestPayload);
         SocketDispatcher.emitToHotel(hotelId, SOCKET_EVENTS.SERVICE_REQUEST_CREATED, { ...requestPayload, _routedTo: department });
 
         res.status(201).json({
