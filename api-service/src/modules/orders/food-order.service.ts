@@ -486,11 +486,12 @@ export const foodOrderService = {
     },
 
     /**
-     * Bottom-bar summary: IDs + statuses of all active food orders for this customer.
-     * Intentionally slim — no item list, no hotel enrichment.
+     * Bottom-bar summary: IDs + statuses of active food orders for this customer
+     * scoped to their current hotel stay. Intentionally slim — no item list.
      */
-    getActiveFoodOrdersSummary: async (userId: string): Promise<ActiveFoodOrderSummary[]> => {
+    getActiveFoodOrdersSummary: async (userId: string, hotelId: string): Promise<ActiveFoodOrderSummary[]> => {
         const docs = await FoodOrderModel.find({
+            hotelId,
             $or: [{ placedById: userId }, { customerId: userId }],
             status: { $in: ACTIVE_FOOD_ORDER_STATUSES as unknown as string[] },
         })
@@ -506,32 +507,28 @@ export const foodOrderService = {
     },
 
     /**
-     * Status page: full active food orders for the carousel view.
-     * Sorted oldest-first so the earliest order appears first in the carousel.
-     * Enriched with hotel name and address for display.
+     * Status page: full active food orders for the carousel view, scoped to the
+     * customer's current hotel. Sorted oldest-first so the first order placed
+     * appears first in the carousel. Enriched with hotel name and address.
      */
-    getActiveFoodOrders: async (userId: string): Promise<ActiveFoodOrder[]> => {
+    getActiveFoodOrders: async (userId: string, hotelId: string): Promise<ActiveFoodOrder[]> => {
         const docs = await FoodOrderModel.find({
+            hotelId,
             $or: [{ placedById: userId }, { customerId: userId }],
             status: { $in: ACTIVE_FOOD_ORDER_STATUSES as unknown as string[] },
         })
-            .select("_id status channelType roomNumber cookingRequest items bill count acceptedAt createdAt hotelId")
+            .select("_id status channelType roomNumber cookingRequest items bill count acceptedAt createdAt")
             .sort({ createdAt: 1 })
             .lean();
 
-        // Batch hotel enrichment — one call per unique hotel
-        const uniqueHotelIds = [...new Set(docs.map((d) => (d.hotelId as { toString(): string }).toString()))];
-        const hotelMap = new Map<string, { name: string; address: string }>();
-        for (const hotelId of uniqueHotelIds) {
-            const res = await hospitalityService.getHotelContextForCustomer(hotelId);
-            hotelMap.set(hotelId, {
-                name: res.success && res.data ? res.data.name : "",
-                address: res.success && res.data ? res.data.address : "",
-            });
-        }
+        // hotelId is already known — single fetch, no N+1
+        const hotelRes = await hospitalityService.getHotelContextForCustomer(hotelId);
+        const hotel = {
+            name: hotelRes.success && hotelRes.data ? hotelRes.data.name : "",
+            address: hotelRes.success && hotelRes.data ? hotelRes.data.address : "",
+        };
 
         return docs.map((d) => {
-            const hotelId = (d.hotelId as { toString(): string }).toString();
             const rawItems = (d.items as Array<{ itemName: string; quantity: number; variantName?: string }>) ?? [];
             const bill = d.bill as { subtotal: number; toPay: number };
 
@@ -550,7 +547,7 @@ export const foodOrderService = {
                 count: d.count as number,
                 acceptedAt: d.acceptedAt ? (d.acceptedAt as Date).toISOString() : null,
                 createdAt: (d.createdAt as Date).toISOString(),
-                hotel: hotelMap.get(hotelId) ?? { name: "", address: "" },
+                hotel,
             };
         });
     },

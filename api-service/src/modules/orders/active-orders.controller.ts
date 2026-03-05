@@ -9,19 +9,26 @@ export class ActiveOrdersController {
      * GET /orders/active
      *
      * Bottom-bar summary. Returns only _id + status + createdAt for each active
-     * food order and service request belonging to the caller.
+     * food order and service request scoped to the customer's current hotel
+     * (from the customer_room_hotel_id cookie).
      *
-     * Lightweight by design — the frontend uses this to render the bottom bar
-     * count and per-order status animation without fetching item details.
-     * Real-time updates arrive via socket events (food.order.preparing,
-     * service.request.accepted, etc.) so no polling is needed after initial load.
+     * Returns empty arrays when no hotel cookie is present — the customer has
+     * not checked in, so they cannot have active orders at any hotel.
      */
     getActiveSummary = asyncHandler(async (req: Request, res: Response) => {
         const user = (req as any).user as IJwtPayload;
+        const hotelId = req.cookies?.customer_room_hotel_id as string | undefined;
+
+        if (!hotelId) {
+            return res.status(200).json({
+                success: true,
+                data: { foodOrders: [], serviceRequests: [] },
+            });
+        }
 
         const [foodOrders, serviceRequests] = await Promise.all([
-            foodOrderService.getActiveFoodOrdersSummary(user.sub),
-            serviceRequestService.getActiveServiceRequestsSummary(user.sub),
+            foodOrderService.getActiveFoodOrdersSummary(user.sub, hotelId),
+            serviceRequestService.getActiveServiceRequestsSummary(user.sub, hotelId),
         ]);
 
         res.status(200).json({
@@ -33,39 +40,40 @@ export class ActiveOrdersController {
     /**
      * GET /orders/food/active
      *
-     * Full active food orders for the food-order status page.
-     * Returns item list, bill, hotel name and timestamps so the carousel
-     * can render per-order progress animations (PENDING → PREPARING).
-     * Sorted oldest-first — the first order placed appears first in the carousel.
+     * Full active food orders for the food-order status page carousel.
+     * Scoped to the customer's current hotel (customer_room_hotel_id cookie).
+     * Returns empty array when no hotel cookie is present.
      */
     getActiveFoodOrders = asyncHandler(async (req: Request, res: Response) => {
         const user = (req as any).user as IJwtPayload;
+        const hotelId = req.cookies?.customer_room_hotel_id as string | undefined;
 
-        const orders = await foodOrderService.getActiveFoodOrders(user.sub);
+        if (!hotelId) {
+            return res.status(200).json({ success: true, data: [] });
+        }
 
-        res.status(200).json({
-            success: true,
-            data: orders,
-        });
+        const orders = await foodOrderService.getActiveFoodOrders(user.sub, hotelId);
+
+        res.status(200).json({ success: true, data: orders });
     });
 
     /**
      * GET /orders/service/active
      *
-     * Full active service requests for the service-request status page.
-     * Returns item list (grouped by category), hotel name and timestamps so
-     * the carousel can render per-request progress animations
-     * (PENDING → ACCEPTED → IN_PROGRESS).
-     * Sorted oldest-first — the earliest request appears first in the carousel.
+     * Full active service requests for the service-request status page carousel.
+     * Scoped to the customer's current hotel (customer_room_hotel_id cookie).
+     * Returns empty array when no hotel cookie is present.
      */
     getActiveServiceRequests = asyncHandler(async (req: Request, res: Response) => {
         const user = (req as any).user as IJwtPayload;
+        const hotelId = req.cookies?.customer_room_hotel_id as string | undefined;
 
-        const requests = await serviceRequestService.getActiveServiceRequests(user.sub);
+        if (!hotelId) {
+            return res.status(200).json({ success: true, data: [] });
+        }
 
-        res.status(200).json({
-            success: true,
-            data: requests,
-        });
+        const requests = await serviceRequestService.getActiveServiceRequests(user.sub, hotelId);
+
+        res.status(200).json({ success: true, data: requests });
     });
 }

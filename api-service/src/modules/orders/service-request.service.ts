@@ -360,12 +360,13 @@ export const serviceRequestService = {
     },
 
     /**
-     * Bottom-bar summary: IDs + statuses of all active service requests for this customer.
-     * Intentionally slim — no item list, no hotel enrichment.
+     * Bottom-bar summary: IDs + statuses of active service requests for this customer
+     * scoped to their current hotel stay. Intentionally slim — no item list.
      */
-    getActiveServiceRequestsSummary: async (userId: string): Promise<ActiveServiceRequestSummary[]> => {
+    getActiveServiceRequestsSummary: async (userId: string, hotelId: string): Promise<ActiveServiceRequestSummary[]> => {
         const docs = await ServiceRequestModel.find({
             userId,
+            hotelId,
             status: { $in: ACTIVE_SERVICE_REQUEST_STATUSES as unknown as string[] },
         })
             .select("_id status createdAt")
@@ -380,32 +381,28 @@ export const serviceRequestService = {
     },
 
     /**
-     * Status page: full active service requests for the carousel view.
-     * Sorted oldest-first so the earliest request appears first in the carousel.
-     * Enriched with hotel name and address for display.
+     * Status page: full active service requests for the carousel view, scoped to the
+     * customer's current hotel. Sorted oldest-first so the earliest request appears
+     * first in the carousel. Enriched with hotel name and address.
      */
-    getActiveServiceRequests: async (userId: string): Promise<ActiveServiceRequest[]> => {
+    getActiveServiceRequests: async (userId: string, hotelId: string): Promise<ActiveServiceRequest[]> => {
         const docs = await ServiceRequestModel.find({
             userId,
+            hotelId,
             status: { $in: ACTIVE_SERVICE_REQUEST_STATUSES as unknown as string[] },
         })
-            .select("_id status roomNumber note items totalAmount acceptedAt startedAt createdAt hotelId")
+            .select("_id status roomNumber note items totalAmount acceptedAt startedAt createdAt")
             .sort({ createdAt: 1 })
             .lean();
 
-        // Batch hotel enrichment — one call per unique hotel
-        const uniqueHotelIds = [...new Set(docs.map((d) => (d.hotelId as { toString(): string }).toString()))];
-        const hotelMap = new Map<string, { name: string; address: string }>();
-        for (const hotelId of uniqueHotelIds) {
-            const res = await hospitalityService.getHotelContextForCustomer(hotelId);
-            hotelMap.set(hotelId, {
-                name: res.success && res.data ? res.data.name : "",
-                address: res.success && res.data ? res.data.address : "",
-            });
-        }
+        // hotelId is already known — single fetch, no N+1
+        const hotelRes = await hospitalityService.getHotelContextForCustomer(hotelId);
+        const hotel = {
+            name: hotelRes.success && hotelRes.data ? hotelRes.data.name : "",
+            address: hotelRes.success && hotelRes.data ? hotelRes.data.address : "",
+        };
 
         return docs.map((d) => {
-            const hotelId = (d.hotelId as { toString(): string }).toString();
             const rawItems = (d.items as Array<{ itemName: string; categoryName: string; quantity: number }>) ?? [];
 
             return {
@@ -422,7 +419,7 @@ export const serviceRequestService = {
                 acceptedAt: d.acceptedAt ? (d.acceptedAt as Date).toISOString() : null,
                 startedAt: d.startedAt ? (d.startedAt as Date).toISOString() : null,
                 createdAt: (d.createdAt as Date).toISOString(),
-                hotel: hotelMap.get(hotelId) ?? { name: "", address: "" },
+                hotel,
             };
         });
     },
