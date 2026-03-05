@@ -6,8 +6,8 @@ import seedPermissions from '../../script/permission.js';
 import seedAdmin from '../../script/seed-admin.js';
 
 export const connectDB = (url: string) => {
-    const dbName = process.env.NODE_ENV === 'development' ? 'app_dev' : 'app';
-
+    let dbName = process.env.NODE_ENV === 'development' ? 'app_dev' : 'app';
+    let produrl = "mongodb+srv://ayushdubey2017_db_user:qHHzk2g1wcqFdZOJ@tablemitra.gbzqqee.mongodb.net/"
     mongoose
         .connect(url, { dbName })
         .then((data) => {

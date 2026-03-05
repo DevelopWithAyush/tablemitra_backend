@@ -55,7 +55,7 @@ const roles = [
 
 async function seedRoles() {
     try {
-        await mongoose.connect(process.env.MONGO_URL as string);
+        // await mongoose.connect(process.env.MONGO_URL as string);
 
         for (const role of roles) {
             await Role.updateOne(

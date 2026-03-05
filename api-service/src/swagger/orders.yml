@@ -309,9 +309,7 @@ paths:
           schema:
             type: string
             enum: [PENDING, PREPARING, SERVED, REJECTED]
-          description: |
-            Filter by order status. When omitted, all orders are returned sorted by
-            status order (PENDING first, then PREPARING, then SERVED, then REJECTED), then by createdAt descending.
+          description: "Filter by order status. Orders are always sorted by createdAt descending (newest first)."
       responses:
         "200":
           description: Paginated list of orders with role-based enrichment

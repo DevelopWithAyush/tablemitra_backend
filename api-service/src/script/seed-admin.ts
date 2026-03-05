@@ -7,11 +7,11 @@ import logger from "../helpers/logger/index.js";
 
 dotenv.config();
 
-const ADMIN_USER_ID = "697fbc1d97a587d4a71e9746";
+const ADMIN_USER_ID = "699b85d245fc9357d88d791d";
 
 async function seedAdmin() {
     try {
-        await mongoose.connect(process.env.MONGO_URL as string);
+        // await mongoose.connect(process.env.MONGO_URL as string);
 
         const adminRole = await Role.findOne({ key: "ADMIN" });
         if (!adminRole) {

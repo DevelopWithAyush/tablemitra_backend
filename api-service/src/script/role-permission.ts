@@ -189,7 +189,7 @@ const rolePermissionMap: Record<string, string[]> = {
 
 async function seedRolePermissions() {
     try {
-        await mongoose.connect(process.env.MONGO_URL as string);
+        // await mongoose.connect(process.env.MONGO_URL as string);
 
         for (const [roleKey, permissionKeys] of Object.entries(rolePermissionMap)) {
 

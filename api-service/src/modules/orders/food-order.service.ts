@@ -349,58 +349,11 @@ export const foodOrderService = {
 
         const total = await FoodOrderModel.countDocuments(filter);
 
-        let orders: Record<string, unknown>[];
-        if (params.status != null) {
-            orders = await FoodOrderModel.find(filter)
-                .sort({ createdAt: -1 })
-                .skip(skip)
-                .limit(params.limit)
-                .lean();
-        } else {
-                      const aggFilter: Record<string, unknown> = {};
-                      if (filter.$or) {
-                          aggFilter.$or = (filter.$or as Array<Record<string, unknown>>).map((clause) => {
-                              const c = { ...clause };
-                              if (c.placedById != null) c.placedById = new Types.ObjectId(String(c.placedById));
-                              if (c.customerId != null) c.customerId = new Types.ObjectId(String(c.customerId));
-                              return c;
-                          });
-                      }
-                      if (filter.hotelId !== undefined) {
-                          if (filter.hotelId === null) {
-                              aggFilter.hotelId = null;
-                          } else if (typeof filter.hotelId === "object" && (filter.hotelId as Record<string, unknown>).$in) {
-                              const arr = (filter.hotelId as { $in: string[] }).$in;
-                              aggFilter.hotelId = { $in: arr.map((id) => new Types.ObjectId(id)) };
-                          } else {
-                              aggFilter.hotelId = new Types.ObjectId(String(filter.hotelId));
-                          }
-                      }
-                      if (filter._id !== undefined) aggFilter._id = filter._id;
-                      const andClause = filter.$and;
-                      if (Array.isArray(andClause) && andClause.length > 0) aggFilter.$and = andClause;
-                      orders = await FoodOrderModel.aggregate([
-                          { $match: aggFilter },
-                          {
-                              $addFields: {
-                                  statusOrder: {
-                                      $switch: {
-                                          branches: [
-                                              { case: { $eq: ["$status", "PENDING"] }, then: 1 },
-                                              { case: { $eq: ["$status", "PREPARING"] }, then: 2 },
-                                              { case: { $eq: ["$status", "SERVED"] }, then: 3 },
-                                              { case: { $eq: ["$status", "REJECTED"] }, then: 4 },
-                                          ],
-                                          default: 5,
-                                      },
-                                  },
-                              },
-                          },
-                          { $sort: { statusOrder: 1, createdAt: -1 } },
-                          { $skip: skip },
-                          { $limit: params.limit },
-                      ]);
-        }
+        const orders = await FoodOrderModel.find(filter)
+            .sort({ createdAt: -1 })
+            .skip(skip)
+            .limit(params.limit)
+            .lean();
 
         const list: OrderListItem[] = orders.map((o: Record<string, unknown>) => ({
             _id: (o._id as { toString: () => string }).toString(),

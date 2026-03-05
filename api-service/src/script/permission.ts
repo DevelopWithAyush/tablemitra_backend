@@ -117,7 +117,7 @@ export const permissions = [
 
 async function seedPermissions() {
     try {
-        await mongoose.connect(process.env.MONGO_URL as string);
+        // await mongoose.connect(process.env.MONGO_URL as string);
 
         for (const permission of permissions) {
             await Permission.updateOne(
