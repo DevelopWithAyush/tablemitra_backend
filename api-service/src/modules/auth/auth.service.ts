@@ -349,7 +349,9 @@ class AuthService {
                     const roomResult = await hospitalityService.attachCustomerToRoomSession(
                         payload.hotelId,
                         payload.roomNumber,
-                        userId
+                        userId,
+                        session  // pass the transaction session so the RoomSession write
+                                 // is rolled back together with auth Session if anything fails
                     );
                     if (roomResult.success && roomResult.data) {
                         (base as { roomContext?: CustomerRoomContext }).roomContext = roomResult.data;

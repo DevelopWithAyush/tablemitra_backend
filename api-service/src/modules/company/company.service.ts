@@ -1,3 +1,4 @@
+import { runInTransaction } from "../../infra/db/transaction.js";
 import { getRedis } from "../../infra/redis/redis.js";
 import authService from "../auth/auth.service.js";
 import Admin from "./db/admin-profile.model.js";
@@ -175,23 +176,24 @@ class CompanyService {
     };
 
     createAdmin = async (dto: CreateAdminDTO, auditContext?: CompanyAuditContext): Promise<CreateResult> => {
-        // Check if email already exists
+        // Check if email already exists (read-only, outside transaction)
         const existingEmail = await Admin.findOne({ email: dto.email });
         if (existingEmail) {
             return { success: false, message: "Email already exists" };
         }
 
-        // Create user and assign role via auth service (DDD)
-        const userResult = await authService.createUserWithRole(dto.phone, "ADMIN");
-        if (!userResult.success) {
-            return { success: false, message: userResult.message };
-        }
+        // User creation and profile creation share the same transaction so that
+        // a failure in Admin.create rolls back the User + UserRole writes too,
+        // preventing a dangling user account with no admin profile.
+        const admin = await runInTransaction(async (session) => {
+            const userResult = await authService.createUserWithRole(dto.phone, "ADMIN", "GLOBAL", undefined, session);
+            if (!userResult.success) throw new Error(userResult.message ?? "Failed to create user");
 
-        // Create admin profile
-        const admin = await Admin.create({
-            userId: userResult.userId,
-            name: dto.name,
-            email: dto.email,
+            const [created] = await Admin.create(
+                [{ userId: userResult.userId, name: dto.name, email: dto.email }],
+                { session }
+            );
+            return created;
         });
 
         await invalidateListCache(CACHE_KEYS.ADMIN_LIST);
@@ -375,28 +377,23 @@ class CompanyService {
     };
 
     createCustomerCare = async (dto: CreateCustomerCareDTO, auditContext?: CompanyAuditContext): Promise<CreateResult> => {
-        // Check if email already exists
+        // Check if email already exists (read-only, outside transaction)
         const existingEmail = await CustomerCare.findOne({ email: dto.email });
         if (existingEmail) {
             return { success: false, message: "Email already exists" };
         }
 
-        // Create user and assign role via auth service (DDD)
-        const userResult = await authService.createUserWithRole(dto.phone, "CUSTOMER_CARE");
-        if (!userResult.success) {
-            return { success: false, message: userResult.message };
-        }
-
-        // Generate employee code
         const employeeCode = await generateCustomerCareCode();
 
-        // Create customer care profile
-        const customerCare = await CustomerCare.create({
-            userId: userResult.userId,
-            employeeCode,
-            name: dto.name,
-            email: dto.email,
-            designation: dto.designation,
+        const customerCare = await runInTransaction(async (session) => {
+            const userResult = await authService.createUserWithRole(dto.phone, "CUSTOMER_CARE", "GLOBAL", undefined, session);
+            if (!userResult.success) throw new Error(userResult.message ?? "Failed to create user");
+
+            const [created] = await CustomerCare.create(
+                [{ userId: userResult.userId, employeeCode, name: dto.name, email: dto.email, designation: dto.designation }],
+                { session }
+            );
+            return created;
         });
 
         await invalidateListCache(CACHE_KEYS.CUSTOMER_CARE_LIST);
@@ -604,27 +601,23 @@ class CompanyService {
     };
 
     createSales = async (dto: CreateSalesDTO, auditContext?: CompanyAuditContext): Promise<CreateResult> => {
-        // Check if email already exists
+        // Check if email already exists (read-only, outside transaction)
         const existingEmail = await SalesProfile.findOne({ email: dto.email });
         if (existingEmail) {
             return { success: false, message: "Email already exists" };
         }
 
-        // Create user and assign role via auth service (DDD)
-        const userResult = await authService.createUserWithRole(dto.phone, "SALES");
-        if (!userResult.success) {
-            return { success: false, message: userResult.message };
-        }
-
-        // Generate employee code
         const employeeCode = await generateSalesCode();
 
-        // Create sales profile
-        const sales = await SalesProfile.create({
-            userId: userResult.userId,
-            employeeCode,
-            name: dto.name,
-            email: dto.email,
+        const sales = await runInTransaction(async (session) => {
+            const userResult = await authService.createUserWithRole(dto.phone, "SALES", "GLOBAL", undefined, session);
+            if (!userResult.success) throw new Error(userResult.message ?? "Failed to create user");
+
+            const [created] = await SalesProfile.create(
+                [{ userId: userResult.userId, employeeCode, name: dto.name, email: dto.email }],
+                { session }
+            );
+            return created;
         });
 
         await invalidateListCache(CACHE_KEYS.SALES_LIST);

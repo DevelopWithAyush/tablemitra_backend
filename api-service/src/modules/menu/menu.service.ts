@@ -1,4 +1,5 @@
 import { Types } from "mongoose";
+import { runInTransaction } from "../../infra/db/transaction.js";
 import { getRedis } from "../../infra/redis/redis.js";
 import { CategoryModel } from "./db/category.model.js";
 import { ItemModel } from "./db/item.model.js";
@@ -591,44 +592,53 @@ class MenuService {
                 variantPriceRange = calculateVariantPriceRange(dto.variants);
             }
 
-            // Create item
-            const item = await ItemModel.create({
-                hotelId: new Types.ObjectId(hotelId),
-                categoryId: new Types.ObjectId(categoryId),
-                name: dto.name,
-                description: dto.description,
-                image: dto.image ? new Types.ObjectId(dto.image) : undefined,
-                shortCode: dto.shortCode.toUpperCase(),
-                sortOrder: dto.sortOrder ?? 0,
-                type: dto.type,
-                preparationTimeMinutes: dto.preparationTimeMinutes,
-                price: hasVariants ? undefined : dto.price,
-                discountedPrice: hasVariants ? undefined : dto.discountedPrice,
-                hasVariants,
-                minVariantPrice: variantPriceRange?.minVariantPrice,
-                maxVariantPrice: variantPriceRange?.maxVariantPrice,
-                isPopular: dto.isPopular ?? false,
-                availability: dto.availability,
-                suggestedItemIds: dto.suggestedItemIds?.map((id) => new Types.ObjectId(id)),
+            // Create item and variants atomically — if variant insert fails the
+            // item is rolled back, preventing an orphaned item with hasVariants:true
+            // but no variant documents in the DB.
+            const { item, variants } = await runInTransaction(async (session) => {
+                const [newItem] = await ItemModel.create(
+                    [
+                        {
+                            hotelId: new Types.ObjectId(hotelId),
+                            categoryId: new Types.ObjectId(categoryId),
+                            name: dto.name,
+                            description: dto.description,
+                            image: dto.image ? new Types.ObjectId(dto.image) : undefined,
+                            shortCode: dto.shortCode.toUpperCase(),
+                            sortOrder: dto.sortOrder ?? 0,
+                            type: dto.type,
+                            preparationTimeMinutes: dto.preparationTimeMinutes,
+                            price: hasVariants ? undefined : dto.price,
+                            discountedPrice: hasVariants ? undefined : dto.discountedPrice,
+                            hasVariants,
+                            minVariantPrice: variantPriceRange?.minVariantPrice,
+                            maxVariantPrice: variantPriceRange?.maxVariantPrice,
+                            isPopular: dto.isPopular ?? false,
+                            availability: dto.availability,
+                            suggestedItemIds: dto.suggestedItemIds?.map((id) => new Types.ObjectId(id)),
+                        },
+                    ],
+                    { session }
+                );
+
+                let createdVariants: IVariant[] = [];
+                if (hasVariants && dto.variants) {
+                    const variantDocs = dto.variants.map((v) => ({
+                        hotelId: new Types.ObjectId(hotelId),
+                        itemId: newItem._id,
+                        name: v.name,
+                        shortCode: v.shortCode.toUpperCase(),
+                        price: v.price,
+                        discountedPrice: v.discountedPrice,
+                        preparationTimeMinutes: v.preparationTimeMinutes,
+                        sortOrder: v.sortOrder ?? 0,
+                    }));
+                    const inserted = await VariantModel.insertMany(variantDocs, { session });
+                    createdVariants = inserted.map((v) => v.toObject()) as unknown as IVariant[];
+                }
+
+                return { item: newItem, variants: createdVariants };
             });
-
-            // Create variants if provided
-            let variants: IVariant[] = [];
-            if (hasVariants && dto.variants) {
-                const variantDocs = dto.variants.map((v) => ({
-                    hotelId: new Types.ObjectId(hotelId),
-                    itemId: item._id,
-                    name: v.name,
-                    shortCode: v.shortCode.toUpperCase(),
-                    price: v.price,
-                    discountedPrice: v.discountedPrice,
-                    preparationTimeMinutes: v.preparationTimeMinutes,
-                    sortOrder: v.sortOrder ?? 0,
-                }));
-
-                const createdVariants = await VariantModel.insertMany(variantDocs);
-                variants = createdVariants.map((v) => v.toObject()) as unknown as IVariant[];
-            }
 
             // Invalidate cache
             await invalidateMenuCache(hotelId);
@@ -716,56 +726,54 @@ class MenuService {
 
             // Handle variants update
             if (dto.variants !== undefined) {
-                const hasVariants = dto.variants.length > 0;
-                item.hasVariants = hasVariants;
+                // Wrap all three writes atomically: deleteMany + optional insertMany + item.save().
+                // Without a transaction, deleteMany succeeding but insertMany failing would
+                // permanently destroy all variants with no way to recover them.
+                await runInTransaction(async (session) => {
+                    const hasVariants = dto.variants!.length > 0;
+                    item.hasVariants = hasVariants;
 
-                if (hasVariants) {
-                    // Delete existing variants
-                    await VariantModel.deleteMany({
-                        itemId: new Types.ObjectId(itemId),
-                        hotelId: new Types.ObjectId(hotelId),
-                    });
+                    await VariantModel.deleteMany(
+                        { itemId: new Types.ObjectId(itemId), hotelId: new Types.ObjectId(hotelId) },
+                        { session }
+                    );
 
-                    // Create new variants
-                    const variantDocs = dto.variants.map((v) => ({
-                        hotelId: new Types.ObjectId(hotelId),
-                        itemId: item._id,
-                        name: v.name,
-                        shortCode: v.shortCode.toUpperCase(),
-                        price: v.price,
-                        discountedPrice: v.discountedPrice,
-                        preparationTimeMinutes: v.preparationTimeMinutes,
-                        sortOrder: v.sortOrder ?? 0,
-                    }));
+                    if (hasVariants) {
+                        const variantDocs = dto.variants!.map((v) => ({
+                            hotelId: new Types.ObjectId(hotelId),
+                            itemId: item._id,
+                            name: v.name,
+                            shortCode: v.shortCode.toUpperCase(),
+                            price: v.price,
+                            discountedPrice: v.discountedPrice,
+                            preparationTimeMinutes: v.preparationTimeMinutes,
+                            sortOrder: v.sortOrder ?? 0,
+                        }));
 
-                    await VariantModel.insertMany(variantDocs);
+                        await VariantModel.insertMany(variantDocs, { session });
 
-                    // Update price range
-                    const priceRange = calculateVariantPriceRange(dto.variants);
-                    item.minVariantPrice = priceRange.minVariantPrice;
-                    item.maxVariantPrice = priceRange.maxVariantPrice;
-                    item.price = undefined;
-                    item.discountedPrice = undefined;
-                } else {
-                    // Remove all variants and use direct pricing
-                    await VariantModel.deleteMany({
-                        itemId: new Types.ObjectId(itemId),
-                        hotelId: new Types.ObjectId(hotelId),
-                    });
-                    item.minVariantPrice = undefined;
-                    item.maxVariantPrice = undefined;
-                }
+                        const priceRange = calculateVariantPriceRange(dto.variants!);
+                        item.minVariantPrice = priceRange.minVariantPrice;
+                        item.maxVariantPrice = priceRange.maxVariantPrice;
+                        item.price = undefined;
+                        item.discountedPrice = undefined;
+                    } else {
+                        item.minVariantPrice = undefined;
+                        item.maxVariantPrice = undefined;
+                    }
+
+                    await item.save({ session });
+                });
             } else {
-                // Update direct pricing if not using variants
+                // No variants involved — update direct pricing and save (single write)
                 if (!item.hasVariants) {
                     if (dto.price !== undefined) item.price = dto.price ?? undefined;
                     if (dto.discountedPrice !== undefined) {
                         item.discountedPrice = dto.discountedPrice ?? undefined;
                     }
                 }
+                await item.save();
             }
-
-            await item.save();
 
             // Fetch updated item with variants
             const updatedItem = await this.getItemById(hotelId, itemId);

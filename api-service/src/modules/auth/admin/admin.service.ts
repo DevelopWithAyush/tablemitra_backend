@@ -1,4 +1,5 @@
 import { Types } from "mongoose";
+import { runInTransaction } from "../../../infra/db/transaction.js";
 import { getRedis } from "../../../infra/redis/redis.js";
 import Role from "../db/role.model.js";
 import Permission from "../db/permission.model.js";
@@ -637,27 +638,27 @@ export const syncRolePermissions = async (
     const toAdd = permissionIds.filter((id) => !currentPermissionIds.includes(id));
     const toRemove = currentPermissionIds.filter((id) => !permissionIds.includes(id));
 
-    if (toAdd.length > 0) {
-        const validPermissions = await Permission.find({
-            _id: { $in: toAdd },
-            isActive: true,
-        });
+    // Wrap both writes atomically: if the insert succeeds but the delete fails
+    // (or vice versa), the role ends up with a partially-synced permission set.
+    if (toAdd.length > 0 || toRemove.length > 0) {
+        const validPermissions = toAdd.length > 0
+            ? await Permission.find({ _id: { $in: toAdd }, isActive: true })
+            : [];
 
-        const addOperations = validPermissions.map((permission) => ({
-            insertOne: {
-                document: { roleId: role._id, permissionId: permission._id },
-            },
-        }));
+        await runInTransaction(async (session) => {
+            if (validPermissions.length > 0) {
+                const addOperations = validPermissions.map((permission) => ({
+                    insertOne: { document: { roleId: role._id, permissionId: permission._id } },
+                }));
+                await RolePermission.bulkWrite(addOperations, { session });
+            }
 
-        if (addOperations.length > 0) {
-            await RolePermission.bulkWrite(addOperations);
-        }
-    }
-
-    if (toRemove.length > 0) {
-        await RolePermission.deleteMany({
-            roleId: role._id,
-            permissionId: { $in: toRemove.map((id) => new Types.ObjectId(id)) },
+            if (toRemove.length > 0) {
+                await RolePermission.deleteMany(
+                    { roleId: role._id, permissionId: { $in: toRemove.map((id) => new Types.ObjectId(id)) } },
+                    { session }
+                );
+            }
         });
     }
 

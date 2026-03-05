@@ -834,7 +834,8 @@ class HospitalityService {
     attachCustomerToRoomSession = async (
         hotelId: string,
         roomNumber: string,
-        userId: string
+        userId: string,
+        txSession?: import("mongoose").ClientSession
     ): Promise<ServiceResult<{ hotelId: string; roomNumber: string; roomSessionId: string }>> => {
         const hid = new Types.ObjectId(hotelId);
         const uid = new Types.ObjectId(userId);
@@ -851,17 +852,17 @@ class HospitalityService {
             if (!roomExists) {
                 return { success: false, message: "Room does not exist for this hotel" };
             }
-            const [created] = await RoomSession.create([
-                {
-                    hotelId: hid,
-                    roomNumber: room,
-                    status: "ACTIVE",
-                    metadata: {
-                        guests: [{ userId: uid }],
-                        guestCount: 1,
+            const [created] = await RoomSession.create(
+                [
+                    {
+                        hotelId: hid,
+                        roomNumber: room,
+                        status: "ACTIVE",
+                        metadata: { guests: [{ userId: uid }], guestCount: 1 },
                     },
-                },
-            ]);
+                ],
+                { session: txSession }
+            );
             session = created.toObject();
             await qrCodeService.invalidateHotelQrCache(hotelId);
         } else {
@@ -876,7 +877,8 @@ class HospitalityService {
                     {
                         $push: { "metadata.guests": { userId: uid } },
                         $inc: { "metadata.guestCount": 1 },
-                    }
+                    },
+                    { session: txSession }
                 );
             }
         }
