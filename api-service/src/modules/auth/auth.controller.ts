@@ -6,6 +6,10 @@ import logger from "../../helpers/logger/index.js";
 import { publishAuditEvent } from "../audit/audit.publisher.js";
 import type { ActorRole } from "../audit/audit.types.js";
 import { UpdateCustomerProfileSchema } from "./validator/auth.validator.js";
+import { buildCookieOptions } from "../../utils/cookies.js";
+
+const ACCESS_TOKEN_MAX_AGE = 15 * 60 * 1000;      // 15 minutes
+const REFRESH_TOKEN_MAX_AGE = 30 * 24 * 60 * 60 * 1000; // 30 days
 
 class AuthController {
     sendOtp = asyncHandler(async (req: Request, res: Response) => {
@@ -44,26 +48,16 @@ class AuthController {
             });
         }
 
-        const { accessToken, refreshToken } = result;
-        const ACCESS_TOKEN_MAX_AGE = 15 * 60 * 1000;
-        const REFRESH_TOKEN_MAX_AGE = 30 * 24 * 60 * 60 * 1000;
+        const { accessToken, refreshToken } = result; 
+        logger.info(`buildCookieOptions: ${buildCookieOptions(app, REFRESH_TOKEN_MAX_AGE)}`);
 
-        res.cookie("refreshToken", refreshToken, {
-            httpOnly: true,
-            secure: true,
-            sameSite: 'none',
-            maxAge: REFRESH_TOKEN_MAX_AGE,
-        });
-        res.cookie("accessToken", accessToken, {
-            httpOnly: true,
-            secure: true,
-            sameSite: 'none',
-            maxAge: ACCESS_TOKEN_MAX_AGE,
-        });
+        res.cookie("refreshToken", refreshToken, buildCookieOptions(app, REFRESH_TOKEN_MAX_AGE));
+        res.cookie("accessToken", accessToken, buildCookieOptions(app, ACCESS_TOKEN_MAX_AGE));
 
         if (app === "customer" && result.roomContext) {
             // Session cookies: no maxAge so they expire when the user closes the browser
-            const roomCookieOpts = { httpOnly: true, secure: true, sameSite: "none" as const };
+            const roomCookieOpts = buildCookieOptions(app, 0);
+            delete roomCookieOpts.maxAge; // session cookie — no maxAge
             res.cookie("customer_room_hotel_id", result.roomContext.hotelId, roomCookieOpts);
             res.cookie("customer_room_room_number", result.roomContext.roomNumber, roomCookieOpts);
             res.cookie("customer_room_session_id", result.roomContext.roomSessionId, roomCookieOpts);
@@ -89,7 +83,8 @@ class AuthController {
 
         // Get refresh token from cookie
         const refreshTokenValue = req.cookies["refreshToken"];
-        
+
+        logger.info(`refreshTokenValue: ${refreshTokenValue}`);
         if (!refreshTokenValue) {
             return res.status(401).json({
                 success: false,
@@ -100,19 +95,8 @@ class AuthController {
         const result = await authService.refreshToken(refreshTokenValue as string, app as string);
 
         if (!result.success) {
-            // Clear cookies on failure
-            res.clearCookie("accessToken", {
-                httpOnly: true,
-                secure: true,
-                sameSite: 'none',
-                maxAge: 0,
-            });
-            res.clearCookie("refreshToken", {
-                httpOnly: true,
-                secure: true,
-                sameSite: 'none',
-                maxAge: 0,
-            });
+            res.clearCookie("accessToken", buildCookieOptions(app as string, 0));
+            res.clearCookie("refreshToken", buildCookieOptions(app as string, 0));
 
             return res.status(401).json({
                 success: false,
@@ -120,15 +104,9 @@ class AuthController {
             });
         }
 
-        const ACCESS_TOKEN_MAX_AGE = 24 * 60 * 1000 * 60; // 24 hours
-
-        // Set new access token cookie
-        res.cookie("accessToken", result.accessToken, {
-            httpOnly: true,
-            secure: true,
-            sameSite: 'none',
-            maxAge: ACCESS_TOKEN_MAX_AGE,
-        });
+        // Rotate cookies — both access token and the new refresh token from rotation
+        res.cookie("accessToken", result.accessToken!, buildCookieOptions(app as string, ACCESS_TOKEN_MAX_AGE));
+        res.cookie("refreshToken", result.refreshToken!, buildCookieOptions(app as string, REFRESH_TOKEN_MAX_AGE));
 
         return res.status(200).json({
             success: true,
@@ -163,7 +141,10 @@ class AuthController {
         const user = (req as any).user as IJwtPayload;
         const { app } = req.params;
 
-        const result = await authService.logout(user.sub, user.roleId, app as string);
+        // Capture the current access token so the service can blocklist it immediately
+        const currentAccessToken = req.headers.authorization?.split(" ")[1] || req.cookies["accessToken"];
+
+        const result = await authService.logout(user.sub, user.roleId, app as string, currentAccessToken);
 
         if (!result.success) {
             const statusCode = result.unauthorized ? 401 : 400;
@@ -173,20 +154,8 @@ class AuthController {
             });
         }
 
-        res.clearCookie("accessToken",
-            {
-                httpOnly: true,
-                secure: true,
-                sameSite: 'none',
-                maxAge: 0,
-            }
-        );
-        res.clearCookie("refreshToken", {
-            httpOnly: true,
-            secure: true,
-            sameSite: 'none',
-            maxAge: 0,
-        });
+        res.clearCookie("accessToken", buildCookieOptions(app as string, 0));
+        res.clearCookie("refreshToken", buildCookieOptions(app as string, 0));
 
         publishAuditEvent(
             "USER_LOGOUT",
@@ -261,21 +230,9 @@ class AuthController {
         }
 
         const { accessToken, refreshToken } = result;
-        const ACCESS_TOKEN_MAX_AGE = 24 * 60 * 1000 * 60; // 24 hours
-        const REFRESH_TOKEN_MAX_AGE = 30 * 24 * 60 * 60 * 1000;
 
-        res.cookie("refreshToken", refreshToken, {
-            httpOnly: true,
-            secure: true,
-            sameSite: 'none',
-            maxAge: REFRESH_TOKEN_MAX_AGE,
-        });
-        res.cookie("accessToken", accessToken, {
-            httpOnly: true,
-            secure: true,
-            sameSite: 'none',
-            maxAge: ACCESS_TOKEN_MAX_AGE,
-        });
+        res.cookie("refreshToken", refreshToken, buildCookieOptions(app as string, REFRESH_TOKEN_MAX_AGE));
+        res.cookie("accessToken", accessToken, buildCookieOptions(app as string, ACCESS_TOKEN_MAX_AGE));
 
         return res.status(200).json({
             success: true,

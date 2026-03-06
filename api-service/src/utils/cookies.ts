@@ -32,10 +32,12 @@ export const buildCookieOptions = (app: string, maxAge: number): CookieOptions =
     const domain = getCookieDomain(app);
     logger.info(`Building cookie options for app: ${app}, domain: ${domain}`);
 
+    // SameSite=None requires Secure flag (browser spec). In dev, Secure is off
+    // so we fall back to SameSite=Lax, which works fine on localhost.
     const options: CookieOptions = {
         httpOnly: true,
         secure: isProduction,
-        sameSite: "none",
+        sameSite: isProduction ? "none" : "lax",
         maxAge,
         path: "/",
     };

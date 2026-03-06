@@ -1,9 +1,9 @@
-import { randomBytes } from "crypto";
+import { createHash, randomBytes } from "crypto";
 import { ClientSession } from "mongoose";
 import { getRedis } from "../../infra/redis/redis.js";
 import { runInTransaction } from "../../infra/db/transaction.js";
 import { generateOtp, otpExpiryTime } from "../../utils/generate-otp.js";
-import { generateAccessToken, generateRefreshToken, verifyRefreshToken, REFRESH_TOKEN_COOKIE_MAX_AGE } from "../../utils/jwt.js";
+import { generateAccessToken, generateRefreshToken, verifyAccessToken, verifyRefreshToken, REFRESH_TOKEN_COOKIE_MAX_AGE } from "../../utils/jwt.js";
 import { sendOTP } from "../../utils/send-message.js";
 import companyService from "../company/company.service.js";
 import hospitalityService from "../hospitality/hospitality.service.js";
@@ -272,7 +272,8 @@ class AuthService {
                 return result;
             }
 
-            await getRedis().set(`${phone}:${app}-otp`, otp, { EX: otpExpiryTime });
+            await getRedis().set(`${phone}:${app}-otp`, otp, { PX: otpExpiryTime });
+            await getRedis().del(`otp:attempts:${phone}:${app}`);
             await sendOTP(phone, otp, "TableMitra");
             return result;
         }
@@ -290,7 +291,8 @@ class AuthService {
             return result;
         }
 
-        await getRedis().set(`${phone}:${app}-otp`, otp, { EX: otpExpiryTime });
+        await getRedis().set(`${phone}:${app}-otp`, otp, { PX: otpExpiryTime });
+        await getRedis().del(`otp:attempts:${phone}:${app}`);
         await sendOTP(phone, otp, app.charAt(0).toUpperCase() + app.slice(1));
         return result;
     };
@@ -303,20 +305,37 @@ class AuthService {
             return { success: false, message: "Invalid app" };
         }
 
-        // Verify OTP
+        // Verify OTP with brute-force protection
+        const MAX_OTP_ATTEMPTS = 5;
+        const OTP_ATTEMPTS_TTL_SECONDS = Math.ceil(otpExpiryTime / 1000); // sync with OTP expiry
         const otpKey = `${phone}:${app}-otp`;
+        const attemptsKey = `otp:attempts:${phone}:${app}`;
         const storedOtp = await getRedis().get(otpKey);
 
         if (!storedOtp) {
-            return { success: false, message: "OTP expired" };
+            return { success: false, message: "OTP expired or not requested" };
         }
 
         if (storedOtp !== code) {
-            return { success: false, message: "Invalid OTP" };
+            const attempts = await getRedis().incr(attemptsKey);
+            if (attempts === 1) {
+                await getRedis().expire(attemptsKey, OTP_ATTEMPTS_TTL_SECONDS);
+            }
+            if (attempts >= MAX_OTP_ATTEMPTS) {
+                await getRedis().del(otpKey);
+                await getRedis().del(attemptsKey);
+                return { success: false, message: "Too many incorrect attempts. Please request a new OTP." };
+            }
+            const remaining = MAX_OTP_ATTEMPTS - attempts;
+            return {
+                success: false,
+                message: `Invalid OTP. ${remaining} attempt${remaining === 1 ? "" : "s"} remaining.`,
+            };
         }
 
-        // OTP is valid - delete it immediately to prevent reuse
+        // OTP valid — delete key and clear attempt counter to prevent replay
         await getRedis().del(otpKey);
+        await getRedis().del(attemptsKey);
 
         // Verify user and create session
         const result = await runInTransaction(async (session) => {
@@ -506,7 +525,12 @@ class AuthService {
         return { success: true, profile: updated as Record<string, unknown> };
     };
 
-    logout = async (userId: string, roleId: string, app: string): Promise<{ success: boolean; message: string; unauthorized?: boolean; roleKey?: string }> => {
+    logout = async (
+        userId: string,
+        roleId: string,
+        app: string,
+        accessToken?: string
+    ): Promise<{ success: boolean; message: string; unauthorized?: boolean; roleKey?: string }> => {
         const expectedRoleKey = APP_ROLE_MAP[app];
         if (!expectedRoleKey) {
             return { success: false, message: "Invalid app", unauthorized: true };
@@ -521,6 +545,22 @@ class AuthService {
             { userId, app, isActive: true },
             { isActive: false }
         );
+
+        // Immediately invalidate the current access token via Redis blocklist so it cannot
+        // be reused during its remaining validity window (up to 15 min)
+        if (accessToken) {
+            try {
+                const decoded = verifyAccessToken(accessToken);
+                const remainingTtlSeconds = (decoded.exp ?? 0) - Math.floor(Date.now() / 1000);
+                if (remainingTtlSeconds > 0) {
+                    const tokenHash = createHash("sha256").update(accessToken).digest("hex");
+                    await getRedis().set(`blocklist:at:${tokenHash}`, "1", { EX: remainingTtlSeconds });
+                }
+            } catch {
+                // Token already expired — no blocklist entry needed
+            }
+        }
+
         return { success: true, message: "Logged out successfully", roleKey: role.key };
     };
 
@@ -530,7 +570,7 @@ class AuthService {
     refreshToken = async (
         refreshTokenValue: string,
         app: string
-    ): Promise<{ success: boolean; accessToken?: string; message?: string; unauthorized?: boolean }> => {
+    ): Promise<{ success: boolean; accessToken?: string; refreshToken?: string; message?: string; unauthorized?: boolean }> => {
         const expectedRoleKey = APP_ROLE_MAP[app];
         if (!expectedRoleKey) {
             return { success: false, message: "Invalid app", unauthorized: true };
@@ -558,12 +598,19 @@ class AuthService {
 
         // Check if session has expired
         if (new Date(session.expiresAt) < new Date()) {
-            // Deactivate expired session
-            await Session.updateOne(
-                { _id: session._id },
-                { isActive: false }
-            );
+            await Session.updateOne({ _id: session._id }, { isActive: false });
             return { success: false, message: "Session expired", unauthorized: true };
+        }
+
+        // Check user-level block / deletion (prevents blocked users from silently refreshing)
+        const userDoc = await User.findById(decoded.sub).select("isBlocked isDeleted isActive").lean();
+        if (!userDoc || userDoc.isDeleted || !userDoc.isActive) {
+            await Session.updateOne({ _id: session._id }, { isActive: false });
+            return { success: false, message: "User account not found or inactive", unauthorized: true };
+        }
+        if (userDoc.isBlocked) {
+            await Session.updateOne({ _id: session._id }, { isActive: false });
+            return { success: false, message: "Your account has been blocked. Please contact support.", unauthorized: true };
         }
 
         // Verify role matches the app
@@ -606,15 +653,26 @@ class AuthService {
             return { success: false, message: "Your account is no longer active. Please contact support.", unauthorized: true };
         }
 
-        // Generate new access token with same payload
-        const accessToken = generateAccessToken({
+        // Rotate both tokens — new access token + new refresh token
+        const newPayload: Omit<IJwtPayload, "iat" | "exp"> = {
             sub: decoded.sub,
             roleId: decoded.roleId,
             app: decoded.app,
             ctx: decoded.ctx,
-        });
+        };
+        const accessToken = generateAccessToken(newPayload);
+        const newRefreshToken = generateRefreshToken(newPayload);
 
-        return { success: true, accessToken };
+        // Persist rotated refresh token and extend session expiry
+        await Session.updateOne(
+            { _id: session._id },
+            {
+                refreshToken: newRefreshToken,
+                expiresAt: new Date(Date.now() + REFRESH_TOKEN_COOKIE_MAX_AGE),
+            }
+        );
+
+        return { success: true, accessToken, refreshToken: newRefreshToken };
     };
 
     /**
