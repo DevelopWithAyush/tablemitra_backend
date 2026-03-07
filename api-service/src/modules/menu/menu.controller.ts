@@ -60,11 +60,11 @@ export const getCategories = asyncHandler(async (req: Request, res: Response) =>
     const hotelId = getHotelIdFromContext(req);
     const query = PaginationSchema.parse(req.query);
 
-    const result = await menuService.getCategories(hotelId, query);
+    const data = await menuService.getCategories(hotelId, query);
 
     return res.json({
         success: true,
-        ...result,
+        data,
     });
 });
 
@@ -163,7 +163,7 @@ export const getItems = asyncHandler(async (req: Request, res: Response) => {
 
     return res.json({
         success: true,
-        ...result.data,
+        data: result.data,
     });
 });
 

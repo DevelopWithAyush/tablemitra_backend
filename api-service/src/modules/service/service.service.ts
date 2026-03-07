@@ -9,7 +9,6 @@ import {
     UpdateServiceDTO,
     PaginationDTO,
     ServiceResult,
-    PaginatedResult,
     ToggleResult,
     ICategory,
     IService,
@@ -44,8 +43,8 @@ const USER_CATALOG_TTL = 300; // 5 minutes
 // ==================== HELPER FUNCTIONS ====================
 
 const buildListCacheKey = (base: string, options: PaginationDTO): string => {
-    const { page = 1, limit = 20, search = "", isActive } = options;
-    return `${base}:${page}:${limit}:${search}:${isActive ?? "all"}`;
+    const { search = "", isActive } = options;
+    return `${base}:${search}:${isActive ?? "all"}`;
 };
 
 const invalidateCachePattern = async (pattern: string): Promise<void> => {
@@ -75,21 +74,18 @@ class ServiceOptimizationService {
     getCategories = async (
         hotelId: string,
         options: PaginationDTO
-    ): Promise<PaginatedResult<ICategory>> => {
+    ): Promise<ICategory[]> => {
         const redis = getRedis();
         const baseCacheKey = CACHE_KEYS.CATEGORIES_LIST(hotelId);
         const cacheKey = buildListCacheKey(baseCacheKey, options);
 
-        // Check cache
         const cached = await redis.get(cacheKey);
         if (cached) {
             return JSON.parse(cached);
         }
 
-        const { page = 1, limit = 20, search, isActive } = options;
-        const skip = (page - 1) * limit;
+        const { search, isActive } = options;
 
-        // Build filter
         const filter: Record<string, unknown> = { hotelId: new Types.ObjectId(hotelId) };
         if (search) {
             filter.$or = [
@@ -101,30 +97,13 @@ class ServiceOptimizationService {
             filter.isActive = isActive;
         }
 
-        // Execute query
-        const [categories, total] = await Promise.all([
-            ServiceCategoryModel.find(filter)
-                .populate("image", "url type")
-                .sort({ sortOrder: 1, createdAt: -1 })
-                .skip(skip)
-                .limit(limit)
-                .lean(),
-            ServiceCategoryModel.countDocuments(filter),
-        ]);
+        const categories = await ServiceCategoryModel.find(filter)
+            .populate("image", "url type")
+            .sort({ sortOrder: 1, createdAt: -1 })
+            .lean();
 
-        const result: PaginatedResult<ICategory> = {
-            data: categories as unknown as ICategory[],
-            pagination: {
-                total,
-                page,
-                limit,
-                totalPages: Math.ceil(total / limit),
-            },
-        };
-
-        // Cache result
-        await redis.setEx(cacheKey, CACHE_TTL, JSON.stringify(result));
-        return result;
+        await redis.setEx(cacheKey, CACHE_TTL, JSON.stringify(categories));
+        return categories as unknown as ICategory[];
     };
 
     /**
@@ -348,8 +327,7 @@ class ServiceOptimizationService {
         hotelId: string,
         categoryId: string,
         options: PaginationDTO
-    ): Promise<ServiceResult<PaginatedResult<IService>>> => {
-        // Verify category exists and belongs to hotel
+    ): Promise<ServiceResult<IService[]>> => {
         const categoryExists = await ServiceCategoryModel.exists({
             _id: new Types.ObjectId(categoryId),
             hotelId: new Types.ObjectId(hotelId),
@@ -363,16 +341,13 @@ class ServiceOptimizationService {
         const baseCacheKey = CACHE_KEYS.SERVICES_LIST(hotelId, categoryId);
         const cacheKey = buildListCacheKey(baseCacheKey, options);
 
-        // Check cache
         const cached = await redis.get(cacheKey);
         if (cached) {
             return { success: true, data: JSON.parse(cached) };
         }
 
-        const { page = 1, limit = 20, search, isActive } = options;
-        const skip = (page - 1) * limit;
+        const { search, isActive } = options;
 
-        // Build filter
         const filter: Record<string, unknown> = {
             hotelId: new Types.ObjectId(hotelId),
             categoryId: new Types.ObjectId(categoryId),
@@ -387,31 +362,13 @@ class ServiceOptimizationService {
         }
         if (isActive !== undefined) filter.isActive = isActive;
 
-        // Execute query
-        const [services, total] = await Promise.all([
-            ServiceItemModel.find(filter)
-                .populate("image", "url type")
-                .sort({ sortOrder: 1, createdAt: -1 })
-                .skip(skip)
-                .limit(limit)
-                .lean(),
-            ServiceItemModel.countDocuments(filter),
-        ]);
+        const services = await ServiceItemModel.find(filter)
+            .populate("image", "url type")
+            .sort({ sortOrder: 1, createdAt: -1 })
+            .lean();
 
-        const result: PaginatedResult<IService> = {
-            data: services as unknown as IService[],
-            pagination: {
-                total,
-                page,
-                limit,
-                totalPages: Math.ceil(total / limit),
-            },
-        };
-
-        // Cache result
-        await redis.setEx(cacheKey, CACHE_TTL, JSON.stringify(result));
-
-        return { success: true, data: result };
+        await redis.setEx(cacheKey, CACHE_TTL, JSON.stringify(services));
+        return { success: true, data: services as unknown as IService[] };
     };
 
     /**

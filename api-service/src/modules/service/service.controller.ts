@@ -58,11 +58,11 @@ export const getCategories = asyncHandler(async (req: Request, res: Response) =>
     const hotelId = getHotelIdFromContext(req);
     const query = PaginationSchema.parse(req.query);
 
-    const result = await serviceOptimizationService.getCategories(hotelId, query);
+    const data = await serviceOptimizationService.getCategories(hotelId, query);
 
     return res.json({
         success: true,
-        ...result,
+        data,
     });
 });
 
@@ -161,7 +161,7 @@ export const getServices = asyncHandler(async (req: Request, res: Response) => {
 
     return res.json({
         success: true,
-        ...result.data,
+        data: result.data,
     });
 });
 

@@ -11,7 +11,6 @@ import {
     UpdateItemDTO,
     PaginationDTO,
     ServiceResult,
-    PaginatedResult,
     ToggleResult,
     ICategory,
     IItem,
@@ -55,8 +54,8 @@ const USER_MENU_TTL = 300; // 5 minutes
 // ==================== HELPER FUNCTIONS ====================
 
 const buildListCacheKey = (base: string, options: PaginationDTO): string => {
-    const { page = 1, limit = 20, search = "", isActive, type, isPopular } = options;
-    return `${base}:${page}:${limit}:${search}:${isActive ?? "all"}:${type ?? "all"}:${isPopular ?? "all"}`;
+    const { search = "", isActive, type, isPopular } = options;
+    return `${base}:${search}:${isActive ?? "all"}:${type ?? "all"}:${isPopular ?? "all"}`;
 };
 
 const invalidateCachePattern = async (pattern: string): Promise<void> => {
@@ -74,6 +73,13 @@ const invalidateCachePattern = async (pattern: string): Promise<void> => {
 const invalidateMenuCache = async (hotelId: string): Promise<void> => {
     await invalidateCachePattern(`menu:${hotelId}:*`);
 };
+
+// Escape special regex characters so user-supplied names cannot alter the pattern
+const escapeRegex = (str: string): string => str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+// MongoDB E11000 = duplicate key — thrown when a unique index constraint is violated
+const isDuplicateKeyError = (err: unknown): boolean =>
+    typeof err === "object" && err !== null && (err as any).code === 11000;
 
 const calculateVariantPriceRange = (variants: { price: number }[]): VariantPriceRange => {
     if (variants.length === 0) {
@@ -97,21 +103,18 @@ class MenuService {
     getCategories = async (
         hotelId: string,
         options: PaginationDTO
-    ): Promise<PaginatedResult<ICategory>> => {
+    ): Promise<ICategory[]> => {
         const redis = getRedis();
         const baseCacheKey = CACHE_KEYS.CATEGORIES_LIST(hotelId);
         const cacheKey = buildListCacheKey(baseCacheKey, options);
 
-        // Check cache
         const cached = await redis.get(cacheKey);
         if (cached) {
             return JSON.parse(cached);
         }
 
-        const { page = 1, limit = 20, search, isActive } = options;
-        const skip = (page - 1) * limit;
+        const { search, isActive } = options;
 
-        // Build filter
         const filter: Record<string, unknown> = { hotelId: new Types.ObjectId(hotelId) };
         if (search) {
             filter.$or = [
@@ -123,30 +126,13 @@ class MenuService {
             filter.isActive = isActive;
         }
 
-        // Execute query
-        const [categories, total] = await Promise.all([
-            CategoryModel.find(filter)
-                .populate("image", "url type")
-                .sort({ sortOrder: 1, createdAt: -1 })
-                .skip(skip)
-                .limit(limit)
-                .lean(),
-            CategoryModel.countDocuments(filter),
-        ]);
+        const categories = await CategoryModel.find(filter)
+            .populate("image", "url type")
+            .sort({ sortOrder: 1, createdAt: -1 })
+            .lean();
 
-        const result: PaginatedResult<ICategory> = {
-            data: categories as unknown as ICategory[],
-            pagination: {
-                total,
-                page,
-                limit,
-                totalPages: Math.ceil(total / limit),
-            },
-        };
-
-        // Cache result
-        await redis.setEx(cacheKey, CACHE_TTL, JSON.stringify(result));
-        return result;
+        await redis.setEx(cacheKey, CACHE_TTL, JSON.stringify(categories));
+        return categories as unknown as ICategory[];
     };
 
     /**
@@ -194,14 +180,25 @@ class MenuService {
         auditContext?: MenuAuditContext
     ): Promise<ServiceResult<ICategory>> => {
         try {
-            // Check for duplicate name in same hotel
+            // Case-insensitive duplicate name check (escaped to prevent regex injection)
             const existingCategory = await CategoryModel.findOne({
                 hotelId: new Types.ObjectId(hotelId),
-                name: { $regex: new RegExp(`^${dto.name}$`, "i") },
+                name: { $regex: new RegExp(`^${escapeRegex(dto.name)}$`, "i") },
             });
 
             if (existingCategory) {
                 return { success: false, message: "Category with this name already exists" };
+            }
+
+            // Ensure all referenced categories belong to this hotel
+            if (dto.suggestedCategoryIds && dto.suggestedCategoryIds.length > 0) {
+                const validCount = await CategoryModel.countDocuments({
+                    _id: { $in: dto.suggestedCategoryIds.map((id) => new Types.ObjectId(id)) },
+                    hotelId: new Types.ObjectId(hotelId),
+                });
+                if (validCount !== dto.suggestedCategoryIds.length) {
+                    return { success: false, message: "One or more suggested categories do not belong to this hotel" };
+                }
             }
 
             const category = await CategoryModel.create({
@@ -234,6 +231,9 @@ class MenuService {
                 data: category.toObject() as unknown as ICategory,
             };
         } catch (error) {
+            if (isDuplicateKeyError(error)) {
+                return { success: false, message: "Category with this name already exists" };
+            }
             logger.error("Error creating category:", error);
             return {
                 success: false,
@@ -265,7 +265,7 @@ class MenuService {
             if (dto.name && dto.name !== category.name) {
                 const existingCategory = await CategoryModel.findOne({
                     hotelId: new Types.ObjectId(hotelId),
-                    name: { $regex: new RegExp(`^${dto.name}$`, "i") },
+                    name: { $regex: new RegExp(`^${escapeRegex(dto.name)}$`, "i") },
                     _id: { $ne: new Types.ObjectId(categoryId) },
                 });
 
@@ -286,6 +286,16 @@ class MenuService {
                 category.availability = dto.availability || undefined;
             }
             if (dto.suggestedCategoryIds !== undefined) {
+                // Validate cross-hotel ownership before persisting
+                if (dto.suggestedCategoryIds.length > 0) {
+                    const validCount = await CategoryModel.countDocuments({
+                        _id: { $in: dto.suggestedCategoryIds.map((id) => new Types.ObjectId(id)) },
+                        hotelId: new Types.ObjectId(hotelId),
+                    });
+                    if (validCount !== dto.suggestedCategoryIds.length) {
+                        return { success: false, message: "One or more suggested categories do not belong to this hotel" };
+                    }
+                }
                 category.suggestedCategoryIds = dto.suggestedCategoryIds.map(
                     (id) => new Types.ObjectId(id) as any
                 );
@@ -313,6 +323,9 @@ class MenuService {
                 data: category.toObject() as unknown as ICategory,
             };
         } catch (error) {
+            if (isDuplicateKeyError(error)) {
+                return { success: false, message: "Category with this name already exists" };
+            }
             logger.error("Error updating category:", error);
             return {
                 success: false,
@@ -376,8 +389,7 @@ class MenuService {
         hotelId: string,
         categoryId: string,
         options: PaginationDTO
-    ): Promise<ServiceResult<PaginatedResult<IItem>>> => {
-        // Verify category exists and belongs to hotel
+    ): Promise<ServiceResult<IItem[]>> => {
         const categoryExists = await CategoryModel.exists({
             _id: new Types.ObjectId(categoryId),
             hotelId: new Types.ObjectId(hotelId),
@@ -391,16 +403,13 @@ class MenuService {
         const baseCacheKey = CACHE_KEYS.ITEMS_LIST(hotelId, categoryId);
         const cacheKey = buildListCacheKey(baseCacheKey, options);
 
-        // Check cache
         const cached = await redis.get(cacheKey);
         if (cached) {
             return { success: true, data: JSON.parse(cached) };
         }
 
-        const { page = 1, limit = 20, search, isActive, type, isPopular } = options;
-        const skip = (page - 1) * limit;
+        const { search, isActive, type, isPopular } = options;
 
-        // Build filter
         const filter: Record<string, unknown> = {
             hotelId: new Types.ObjectId(hotelId),
             categoryId: new Types.ObjectId(categoryId),
@@ -417,31 +426,13 @@ class MenuService {
         if (type) filter.type = type;
         if (isPopular !== undefined) filter.isPopular = isPopular;
 
-        // Execute query
-        const [items, total] = await Promise.all([
-            ItemModel.find(filter)
-                .populate("image", "url type")
-                .sort({ sortOrder: 1, createdAt: -1 })
-                .skip(skip)
-                .limit(limit)
-                .lean(),
-            ItemModel.countDocuments(filter),
-        ]);
+        const items = await ItemModel.find(filter)
+            .populate("image", "url type")
+            .sort({ sortOrder: 1, createdAt: -1 })
+            .lean();
 
-        const result: PaginatedResult<IItem> = {
-            data: items as unknown as IItem[],
-            pagination: {
-                total,
-                page,
-                limit,
-                totalPages: Math.ceil(total / limit),
-            },
-        };
-
-        // Cache result
-        await redis.setEx(cacheKey, CACHE_TTL, JSON.stringify(result));
-
-        return { success: true, data: result };
+        await redis.setEx(cacheKey, CACHE_TTL, JSON.stringify(items));
+        return { success: true, data: items as unknown as IItem[] };
     };
 
     /**
@@ -584,6 +575,17 @@ class MenuService {
                 return { success: false, message: "Item with this short code already exists" };
             }
 
+            // Ensure all referenced items belong to this hotel
+            if (dto.suggestedItemIds && dto.suggestedItemIds.length > 0) {
+                const validCount = await ItemModel.countDocuments({
+                    _id: { $in: dto.suggestedItemIds.map((id) => new Types.ObjectId(id)) },
+                    hotelId: new Types.ObjectId(hotelId),
+                });
+                if (validCount !== dto.suggestedItemIds.length) {
+                    return { success: false, message: "One or more suggested items do not belong to this hotel" };
+                }
+            }
+
             const hasVariants = dto.variants && dto.variants.length > 0;
 
             // Calculate variant price range
@@ -663,6 +665,9 @@ class MenuService {
                 },
             };
         } catch (error) {
+            if (isDuplicateKeyError(error)) {
+                return { success: false, message: "Item with this short code already exists" };
+            }
             logger.error("Error creating item:", error);
             return {
                 success: false,
@@ -721,6 +726,16 @@ class MenuService {
                 item.availability = dto.availability || undefined;
             }
             if (dto.suggestedItemIds !== undefined) {
+                // Validate cross-hotel ownership before persisting
+                if (dto.suggestedItemIds.length > 0) {
+                    const validCount = await ItemModel.countDocuments({
+                        _id: { $in: dto.suggestedItemIds.map((id) => new Types.ObjectId(id)) },
+                        hotelId: new Types.ObjectId(hotelId),
+                    });
+                    if (validCount !== dto.suggestedItemIds.length) {
+                        return { success: false, message: "One or more suggested items do not belong to this hotel" };
+                    }
+                }
                 item.suggestedItemIds = dto.suggestedItemIds.map((id) => new Types.ObjectId(id) as any);
             }
 
@@ -775,14 +790,14 @@ class MenuService {
                 await item.save();
             }
 
-            // Fetch updated item with variants
+            // Invalidate cache FIRST so the subsequent getItemById reads fresh data from DB
+            await invalidateMenuCache(hotelId);
+
+            // Fetch the fully updated item (cache was just cleared, so this hits the DB)
             const updatedItem = await this.getItemById(hotelId, itemId);
             if (!updatedItem.success) {
                 return updatedItem;
             }
-
-            // Invalidate cache
-            await invalidateMenuCache(hotelId);
 
             if (auditContext) {
                 publishAuditEvent(
@@ -798,6 +813,9 @@ class MenuService {
 
             return updatedItem;
         } catch (error) {
+            if (isDuplicateKeyError(error)) {
+                return { success: false, message: "Item with this short code already exists" };
+            }
             logger.error("Error updating item:", error);
             return {
                 success: false,

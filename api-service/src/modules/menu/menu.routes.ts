@@ -70,7 +70,7 @@ menuRoutes.put(
 );
 
 // Toggle category active status
-menuRoutes.put(
+menuRoutes.patch(
     "/categories/:categoryId/toggle",
     requirePermissions("UPDATE_MENU"),
     validate(ToggleCategoryValidation),
@@ -104,7 +104,7 @@ menuRoutes.put(
 );
 
 // Toggle item active status
-menuRoutes.put(
+menuRoutes.patch(
     "/items/:itemId/toggle",
     requirePermissions("UPDATE_MENU"),
     validate(ToggleItemValidation),

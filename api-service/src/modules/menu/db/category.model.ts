@@ -33,4 +33,8 @@ const CategorySchema = new Schema(
 // Fast category listing per hotel
 CategorySchema.index({ hotelId: 1, sortOrder: 1 });
 
+// Prevent duplicate category names within the same hotel (case-sensitive safety net;
+// the service layer also enforces case-insensitive uniqueness via escaped regex pre-check)
+CategorySchema.index({ hotelId: 1, name: 1 }, { unique: true });
+
 export const CategoryModel = model("Category", CategorySchema);

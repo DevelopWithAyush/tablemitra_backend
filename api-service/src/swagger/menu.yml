@@ -14,7 +14,13 @@ paths:
         - **Type**: veg | non-veg | egg per item.
         Protected (auth required).
       parameters:
-        - $ref: "#/components/parameters/AppParam"
+        - name: app
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [customer, manager, frontdesk, kitchen, room-service]
+          description: Application context (any authenticated role may call this)
         - name: hotelId
           in: query
           required: false
@@ -64,7 +70,13 @@ paths:
         - BearerAuth: []
         - CookieAuth: []
       parameters:
-        - $ref: "#/components/parameters/AppParam"
+        - name: app
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [customer, manager, frontdesk, kitchen, room-service]
+          description: Application context (any authenticated role may call this)
         - $ref: "#/components/parameters/ItemIdParam"
         - name: hotelId
           in: query
@@ -263,7 +275,7 @@ paths:
                 $ref: "#/components/schemas/MenuError"
 
   /api/v1/{app}/menu/categories/{categoryId}/toggle:
-    put:
+    patch:
       tags:
         - Menu - Categories
       summary: Toggle category active status
@@ -529,7 +541,7 @@ paths:
                 $ref: "#/components/schemas/MenuError"
 
   /api/v1/{app}/menu/items/{itemId}/toggle:
-    put:
+    patch:
       tags:
         - Menu - Items
       summary: Toggle item active status
