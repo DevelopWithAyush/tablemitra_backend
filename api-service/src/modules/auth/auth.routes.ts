@@ -3,6 +3,7 @@ import authController from "./auth.controller.js";
 import { validate } from "../../middleware/validate.middleware.js";
 import { SendOtpSchema, VerifyOtpSchema, SwitchChainSchema, UpdateCustomerProfileSchema } from "./validator/auth.validator.js";
 import { authMiddleware } from "../../middleware/auth.middleware.js";
+import { requirePermissions } from "../../middleware/permission.middleware.js";
 
 // mergeParams: true to inherit :app from parent route
 const authRoutes = Router({ mergeParams: true });
@@ -18,10 +19,10 @@ authRoutes.get("/me", authController.getMe);
 authRoutes.post("/logout", authController.logout);
 
 // Founder-specific routes for chain context
-authRoutes.get("/chains", authController.getChains);
-authRoutes.post("/switch-chain", validate(SwitchChainSchema), authController.switchChain);   
+authRoutes.get("/chains",requirePermissions("VIEW_CHAIN"), authController.getChains);
+authRoutes.post("/switch-chain", requirePermissions("SWITCH_CHAIN"), validate(SwitchChainSchema), authController.switchChain);   
 
 
-authRoutes.put("/update-customer-profile", validate(UpdateCustomerProfileSchema), authController.updateCustomerProfile);
+authRoutes.put("/update-customer-profile", requirePermissions("UPDATE_CUSTOMER_PROFILE"), validate(UpdateCustomerProfileSchema), authController.updateCustomerProfile);
 
 export default authRoutes;

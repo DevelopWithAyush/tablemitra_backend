@@ -31,7 +31,7 @@ hospitalityRoutes.get("/home", hospitalityController.getCustomerHomeContext);
 // Sales: Onboard chain with founder
 hospitalityRoutes.post(
     "/chains",
-    requirePermissions(["ONBOARD_HOTEL"], "all", false),
+    requirePermissions(["CREATE_CHAIN"], "all", false),
     validate(OnboardChainSchema),
     hospitalityController.onboardChain
 );
@@ -39,7 +39,7 @@ hospitalityRoutes.post(
 // All: Get all chains
 hospitalityRoutes.get(
     "/chains",
-    requirePermissions(["VIEW_CHAIN", "VIEW_HOTEL"], "any", false),
+    requirePermissions(["VIEW_CHAIN"], "all", false),
     hospitalityController.getAllChains
 );
 
@@ -50,6 +50,11 @@ hospitalityRoutes.get(
     validate(ChainIdParamSchema),
     hospitalityController.getChainById
 );
+
+
+
+// create api to get the all chain on the logged in founder
+
 
 // Founder: Create new chain
 hospitalityRoutes.post(
@@ -64,7 +69,7 @@ hospitalityRoutes.post(
 // Founder: Add chain member
 hospitalityRoutes.post(
     "/chains/:chainId/members",
-    requirePermissions(["ADD_CHAIN_MEMBER"], "all", true),
+    requirePermissions(["ADD_CHAIN_MEMBER", "VIEW_CHAIN_MEMBERS"], "any", true),
     validate(AddChainMemberSchema),
     hospitalityController.addChainMember
 );
@@ -72,7 +77,7 @@ hospitalityRoutes.post(
 // Founder: Get chain members
 hospitalityRoutes.get(
     "/chains/:chainId/members",
-    requirePermissions(["VIEW_CHAIN"], "all", true),
+    requirePermissions(["VIEW_CHAIN_MEMBERS"], "all", true),
     validate(ChainIdParamSchema),
     hospitalityController.getChainMembers
 );
@@ -121,7 +126,7 @@ hospitalityRoutes.get(
 // Onboard staff
 hospitalityRoutes.post(
     "/hotels/:hotelId/staff",
-    requirePermissions(["CREATE_STAFF", "ONBOARD_HOTEL"], "any", true),
+    requirePermissions(["CREATE_STAFF"], "all", true),
     validate(OnboardStaffSchema),
     hospitalityController.onboardStaff
 );
@@ -129,7 +134,7 @@ hospitalityRoutes.post(
 // Get staff by hotel
 hospitalityRoutes.get(
     "/hotels/:hotelId/staff",
-    requirePermissions(["VIEW_STAFF", "VIEW_HOTEL"], "any", true),
+    requirePermissions(["VIEW_STAFF"], "all", true),
     validate(HotelIdParamSchema),
     hospitalityController.getHotelStaff
 );
@@ -139,7 +144,7 @@ hospitalityRoutes.get(
 // Frontdesk: Check in guest to a room
 hospitalityRoutes.post(
     "/hotels/:hotelId/room-sessions/check-in",
-    requirePermissions(["CHECK_IN_GUEST", "VIEW_HOTEL"], "any", true),
+    requirePermissions(["CHECK_IN_GUEST"], "all", true),
     validate(CheckInGuestSchema),
     hospitalityController.checkInGuest
 ); 

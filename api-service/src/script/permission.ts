@@ -6,113 +6,83 @@ import Permission from "../modules/auth/db/permission.model.js";
 dotenv.config();
 export const permissions = [
 
-    // ===== SaaS / GLOBAL LEVEL =====
-    {
-        key: "ONBOARD_HOTEL",
-        description: "Onboard a new hotel into the platform"
-    },
-    {
-        key: "VIEW_HOTEL",
-        description: "View hotel details"
-    },
-    {
-        key: "UPDATE_HOTEL",
-        description: "Update hotel details"
-    },
-    {
-        key: "DELETE_HOTEL",
-        description: "Delete a hotel"
-    },
+    // customer 
+    { key: "UPDATE_CUSTOMER_PROFILE", description: "Update customer profile" },
 
-    { key: "MANAGE_ROLES", description: "Create and manage roles" },
-    { key: "MANAGE_PERMISSIONS", description: "Create and manage permissions" },
+    // ADMIN 
     { key: "MANAGE_ADMINS", description: "Manage admin profiles" },
     { key: "MANAGE_CUSTOMER_CARE", description: "Manage customer care profiles" },
     { key: "MANAGE_SALES", description: "Manage sales profiles" },
+    { key: "MANAGE_ROLES", description: "Manage roles" },
+    { key: "MANAGE_PERMISSIONS", description: "Manage permissions" },
 
-    { key: "VIEW_GLOBAL_REPORTS", description: "View SaaS-level reports" },
-    { key: "EXPORT_GLOBAL_REPORTS", description: "Export SaaS-level reports" },
 
-    // ===== CHAIN / FOUNDER LEVEL =====
-    { key: "CREATE_CHAIN", description: "Create a new chain" },
+    // HTOEL LEVEL 
+    { key: "ONBOARD_HOTEL", description: "Onboard a new hotel into the platform" },
+    { key: "VIEW_HOTEL", description: "View hotel details" },
     { key: "VIEW_CHAIN", description: "View chain details" },
-    { key: "UPDATE_CHAIN", description: "Update chain details" },
-    { key: "DELETE_CHAIN", description: "Delete a chain" },
+    { key: "SWITCH_CHAIN", description: "Switch chain context" },
+    { key: "CREATE_CHAIN", description: "Create a new chain" },
     { key: "ADD_CHAIN_MEMBER", description: "Add co-owner/director to chain" },
-    { key: "REMOVE_CHAIN_MEMBER", description: "Remove member from chain" },
-
-    { key: "ONBOARD_MANAGER", description: "Onboard hotel managers" },
-    { key: "VIEW_MANAGER", description: "View manager profiles" },
-    { key: "UPDATE_MANAGER", description: "Update manager profiles" },
-    { key: "DELETE_MANAGER", description: "Delete manager profiles" },
-    { key: "SERVICE_OPTIMIZATION", description: "Manage service optimization" },
-    { key: "CREATE_ATTACHMENT", description: "Create attachments" },
-
-    { key: "VIEW_CHAIN_REPORTS", description: "View chain-level reports" },
-    { key: "EXPORT_CHAIN_REPORTS", description: "Export chain-level reports" },
-    { key: "VIEW_HOTEL_REPORTS", description: "View individual hotel reports" },
-    { key: "EXPORT_HOTEL_REPORTS", description: "Export hotel reports" },
-
-    // ===== HOTEL STAFF MANAGEMENT =====
-    { key: "CREATE_STAFF", description: "Create hotel staff" },
-    { key: "VIEW_STAFF", description: "View hotel staff" },
-    { key: "UPDATE_STAFF", description: "Update hotel staff" },
-    { key: "DELETE_STAFF", description: "Delete hotel staff" },
-
+    { key: "VIEW_CHAIN_MEMBERS", description: "View chain members" },
+    { key: "CREATE_STAFF", description: "Create staff" },
+    { key: "VIEW_STAFF", description: "View staff" },
     { key: "CHECK_IN_GUEST", description: "Check in a guest" },
 
-    { key: "ASSIGN_STAFF_ROLE", description: "Assign role to hotel staff" },
-    { key: "BLOCK_STAFF", description: "Block a staff member" },
-    { key: "UNBLOCK_STAFF", description: "Unblock a staff member" },
 
-    // ===== CUSTOMER PROFILES =====
-    { key: "CREATE_CUSTOMER_PROFILE", description: "Create customer profile" },
-    { key: "VIEW_CUSTOMER_PROFILE", description: "View customer profile" },
-    { key: "UPDATE_CUSTOMER_PROFILE", description: "Update customer profile" },
-
-    // ===== ORDERS (FOOD + SERVICES) =====
-    { key: "CREATE_ORDER", description: "Place an order" },
-    { key: "VIEW_ORDER", description: "View orders" },
-    { key: "ACCEPT_ORDER", description: "Accept an order" },
-    { key: "CANCEL_ORDER", description: "Cancel an order" },
-    { key: "UPDATE_ORDER", description: "Update order status" },
-    { key: "EDIT_ORDER", description: "Edit an existing order" },
-    { key: "REDIRECT_ORDER", description: "Redirect kitchen orders to another panel" },
-
-    // ===== ROOM SERVICES =====
-    { key: "CREATE_SERVICE_REQUEST", description: "Create room-service request" },
-    { key: "VIEW_SERVICE_REQUEST", description: "View room-service requests" },
-    { key: "ACCEPT_SERVICE_REQUEST", description: "Accept room-service request" },
-    { key: "UPDATE_SERVICE_REQUEST", description: "Update room-service request status (in-progress, complete, reject)" },
-    { key: "CANCEL_SERVICE_REQUEST", description: "Cancel room-service request" },
-
-    // ===== PANEL CONTROLS =====
-    { key: "OPEN_KITCHEN_PANEL", description: "Open kitchen panel" },
-    { key: "CLOSE_KITCHEN_PANEL", description: "Close kitchen panel" },
-    { key: "OPEN_ROOM_SERVICE_PANEL", description: "Open room-service panel" },
-    { key: "CLOSE_ROOM_SERVICE_PANEL", description: "Close room-service panel" },
-
-    // ===== MENU =====
+    //menu
     { key: "VIEW_MENU", description: "View menu" },
     { key: "CREATE_MENU", description: "Create menu" },
     { key: "UPDATE_MENU", description: "Update menu" },
-    { key: "DELETE_MENU", description: "Delete menu" },
+    { key: "DELETE_MENU", description: "Delete menu" }, 
 
+    // service
     { key: "VIEW_SERVICE", description: "View services" },
     { key: "CREATE_SERVICE", description: "Create service" },
     { key: "UPDATE_SERVICE", description: "Update service" },
     { key: "DELETE_SERVICE", description: "Delete service" },
 
-    // ===== QR CODES =====
-    { key: "VIEW_QR", description: "View QR sets and QR codes" },
-    { key: "CREATE_QR", description: "Create QR codes (bulk/single)" },
-    { key: "UPDATE_QR", description: "Update QR codes (activate/deactivate)" },
 
-    // ===== AUTH / SYSTEM =====
-    { key: "LOGIN", description: "Login to system" },
-    { key: "LOGOUT", description: "Logout from system" },
-    { key: "RESET_PASSWORD", description: "Reset password" }
-];
+    // food order
+    { key: "CREATE_FOOD_ORDER", description: "Create a food order" },
+    { key: "VIEW_FOOD_ORDER", description: "View food orders" },
+    { key: "UPDATE_FOOD_ORDER_STATUS", description: "Update food order status" },
+    { key: "EDIT_FOOD_ORDER", description: "Edit a food order" },
+
+
+    // service request
+    { key: "CREATE_SERVICE_REQUEST", description: "Create a service request" },
+    { key: "VIEW_SERVICE_REQUEST", description: "View service requests" },
+    { key: "UPDATE_SERVICE_REQUEST_STATUS", description: "Update service request status" },
+    { key: "EDIT_SERVICE_REQUEST", description: "Edit a service request" }, 
+
+
+
+    // qr code
+    { key: "VIEW_QR", description: "View QR codes" },
+    { key: "CREATE_QR", description: "Create QR codes" },
+    { key: "UPDATE_QR", description: "Update QR codes" },
+    { key: "DELETE_QR", description: "Delete QR codes" }, 
+
+
+
+    // reports
+    { key: "VIEW_GLOBAL_REPORTS", description: "View global reports" },
+    { key: "EXPORT_GLOBAL_REPORTS", description: "Export global reports" },
+    { key: "VIEW_CHAIN_REPORTS", description: "View chain reports" },
+    { key: "EXPORT_CHAIN_REPORTS", description: "Export chain reports" },
+    { key: "VIEW_HOTEL_REPORTS", description: "View hotel reports" },
+    { key: "EXPORT_HOTEL_REPORTS", description: "Export hotel reports" },
+
+
+
+    // attachments
+    { key: "CREATE_ATTACHMENT", description: "Create attachments" },
+    { key: "VIEW_ATTACHMENT", description: "View attachments" },
+    { key: "UPDATE_ATTACHMENT", description: "Update attachments" },
+    { key: "DELETE_ATTACHMENT", description: "Delete attachments" },
+
+]
 
 
 async function seedPermissions() {

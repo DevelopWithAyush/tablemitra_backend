@@ -283,7 +283,16 @@ class MenuService {
             if (dto.sortOrder !== undefined) category.sortOrder = dto.sortOrder;
             if (dto.isActive !== undefined) category.isActive = dto.isActive;
             if (dto.availability !== undefined) {
-                category.availability = dto.availability || undefined;
+                if (!dto.availability) {
+                    category.availability = undefined;
+                } else {
+                    // Explicitly set all subfields so absent fields are $unset, not merged
+                    category.availability = {
+                        days: dto.availability.days,
+                        startTime: dto.availability.startTime,
+                        endTime: dto.availability.endTime,
+                    } as any;
+                }
             }
             if (dto.suggestedCategoryIds !== undefined) {
                 // Validate cross-hotel ownership before persisting
@@ -723,7 +732,16 @@ class MenuService {
             if (dto.isPopular !== undefined) item.isPopular = dto.isPopular;
             if (dto.isActive !== undefined) item.isActive = dto.isActive;
             if (dto.availability !== undefined) {
-                item.availability = dto.availability || undefined;
+                if (!dto.availability) {
+                    item.availability = undefined;
+                } else {
+                    // Explicitly set all subfields so absent fields are $unset, not merged
+                    item.availability = {
+                        days: dto.availability.days,
+                        startTime: dto.availability.startTime,
+                        endTime: dto.availability.endTime,
+                    } as any;
+                }
             }
             if (dto.suggestedItemIds !== undefined) {
                 // Validate cross-hotel ownership before persisting

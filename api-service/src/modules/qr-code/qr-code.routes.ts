@@ -33,7 +33,7 @@ qrCodeRoutes.use(authMiddleware);
 // Get QR Set (Legacy/Existing)
 qrCodeRoutes.get(
     "/hotels/:hotelId/set",
-    requirePermissions("VIEW_QR", "all", true),
+    requirePermissions("VIEW_QR"),
     validate(HotelIdParamSchema),
     qrCodeController.getQrSet
 );
@@ -41,7 +41,7 @@ qrCodeRoutes.get(
 // Get QR Codes (Filtered)
 qrCodeRoutes.get(
     "/hotels/:hotelId",
-    requirePermissions("VIEW_QR", "all", true),
+    requirePermissions("VIEW_QR"),
     validate(GetQrCodesSchema),
     qrCodeController.getQrCodes
 );
@@ -49,7 +49,7 @@ qrCodeRoutes.get(
 // Download QR codes as PDF (filter by type + optional floor/room or zone/table)
 qrCodeRoutes.get(
     "/hotels/:hotelId/download",
-    requirePermissions("VIEW_QR", "all", true),
+    requirePermissions("VIEW_QR"),
     validate(DownloadQrCodesSchema),
     qrCodeController.downloadQrCodesPdf
 );
@@ -57,7 +57,7 @@ qrCodeRoutes.get(
 // Get Distinct Locations
 qrCodeRoutes.get(
     "/hotels/:hotelId/locations",
-    requirePermissions("VIEW_QR", "all", true),
+    requirePermissions("VIEW_QR"),
     validate(GetLocationsSchema),
     qrCodeController.getLocations
 );
@@ -65,7 +65,7 @@ qrCodeRoutes.get(
 // Bulk Generate QR Codes
 qrCodeRoutes.post(
     "/hotels/:hotelId/bulk-generate",
-    requirePermissions("CREATE_QR", "all", true),
+    requirePermissions("CREATE_QR"),
     validate(GenerateQrCodesSchema),
     qrCodeController.generateQrCodes
 );
@@ -73,7 +73,7 @@ qrCodeRoutes.post(
 // Add Single QR Code
 qrCodeRoutes.post(
     "/hotels/:hotelId/single",
-    requirePermissions("CREATE_QR", "all", true),
+    requirePermissions("CREATE_QR"),
     validate(AddSingleQrCodeSchema),
     qrCodeController.addSingleQrCode
 );
@@ -81,7 +81,7 @@ qrCodeRoutes.post(
 // Toggle Status (Activate/Deactivate)
 qrCodeRoutes.patch(
     "/:codeId/status",
-    requirePermissions("UPDATE_QR", "all", true),
+    requirePermissions("UPDATE_QR"),
     validate(ToggleQrStatusSchema),
     qrCodeController.toggleStatus
 );
@@ -89,7 +89,7 @@ qrCodeRoutes.patch(
 // Delete QR Code (Soft Delete)
 qrCodeRoutes.delete(
     "/:codeId",
-    requirePermissions("UPDATE_QR", "all", true),
+    requirePermissions("DELETE_QR"),
     validate(DeleteQrCodeSchema),
     qrCodeController.deleteQrCode
 ); 

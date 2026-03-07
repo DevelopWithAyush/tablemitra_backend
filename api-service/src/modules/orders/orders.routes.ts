@@ -26,11 +26,11 @@ ordersRoutes.get("/food/active", activeOrdersController.getActiveFoodOrders);
 ordersRoutes.get("/service/active", activeOrdersController.getActiveServiceRequests);
 
 // ── Food orders ───────────────────────────────────────────────────────────────
-ordersRoutes.post("/food", validate(PlaceOrderValidation), orderController.placeOrder);
-ordersRoutes.get("/food", validate(GetOrdersValidation), orderController.getOrders);
+ordersRoutes.post("/food", requirePermissions("CREATE_FOOD_ORDER"), validate(PlaceOrderValidation), orderController.placeOrder);
+ordersRoutes.get("/food", requirePermissions("VIEW_FOOD_ORDER"), validate(GetOrdersValidation), orderController.getOrders);
 ordersRoutes.patch(
     "/food/:orderId/status",
-    requirePermissions(["UPDATE_ORDER"], "any", true),
+    requirePermissions("UPDATE_FOOD_ORDER_STATUS"),
     validate(UpdateOrderStatusValidation),
     orderController.updateOrderStatus
 );
@@ -38,18 +38,19 @@ ordersRoutes.patch(
 // ── Service requests (laundry, housekeeping, amenities, etc.) ─────────────────
 ordersRoutes.post(
     "/service",
-    requirePermissions(["CREATE_SERVICE_REQUEST"], "any", true),
+    requirePermissions("CREATE_SERVICE_REQUEST"),
     validate(PlaceServiceRequestValidation),
     serviceRequestController.placeServiceRequest
 );
 ordersRoutes.get(
     "/service",
-    requirePermissions(["VIEW_SERVICE_REQUEST"], "any", true),
+    requirePermissions("VIEW_SERVICE_REQUEST"),
     validate(GetServiceRequestsValidation),
     serviceRequestController.getServiceRequests
 );
 ordersRoutes.patch(
     "/service/:requestId/status",
+    requirePermissions("UPDATE_SERVICE_REQUEST_STATUS"),
     validate(UpdateServiceRequestStatusValidation),
     serviceRequestController.updateServiceRequestStatus
 );

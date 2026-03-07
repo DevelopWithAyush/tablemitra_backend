@@ -44,8 +44,8 @@ const hotelSchema = new mongoose.Schema({
         checkOutTime: { type: String, default: "11:00" },
     },
     panelSettings: {
-        kitchenEnabled: { type: Boolean, default: true },
-        roomServiceEnabled: { type: Boolean, default: true },
+        kitchenEnabled: { type: Boolean, default: false },
+        roomServiceEnabled: { type: Boolean, default: false },
         kitchenOfflineRedirect: {
             type: String,
             enum: ["FRONTDESK", "ROOM_SERVICE"],

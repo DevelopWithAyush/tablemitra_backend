@@ -7,7 +7,7 @@ import logger from "../helpers/logger/index.js";
 
 dotenv.config();
 
-const ADMIN_USER_ID = "699b85d245fc9357d88d791d";
+const ADMIN_USER_ID = "69abc52ed842e95b23d7fde5";
 
 async function seedAdmin() {
     try {

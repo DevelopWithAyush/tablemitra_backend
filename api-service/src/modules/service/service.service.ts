@@ -239,7 +239,16 @@ class ServiceOptimizationService {
             if (dto.sortOrder !== undefined) category.sortOrder = dto.sortOrder;
             if (dto.isActive !== undefined) category.isActive = dto.isActive;
             if (dto.availability !== undefined) {
-                category.availability = dto.availability || undefined;
+                if (!dto.availability) {
+                    category.availability = undefined;
+                } else {
+                    // Explicitly set all subfields so absent fields are $unset, not merged
+                    category.availability = {
+                        days: dto.availability.days,
+                        startTime: dto.availability.startTime,
+                        endTime: dto.availability.endTime,
+                    } as any;
+                }
             }
 
             await category.save();
@@ -525,7 +534,16 @@ class ServiceOptimizationService {
             }
             if (dto.isActive !== undefined) service.isActive = dto.isActive;
             if (dto.availability !== undefined) {
-                service.availability = dto.availability || undefined;
+                if (!dto.availability) {
+                    service.availability = undefined;
+                } else {
+                    // Explicitly set all subfields so absent fields are $unset, not merged
+                    service.availability = {
+                        days: dto.availability.days,
+                        startTime: dto.availability.startTime,
+                        endTime: dto.availability.endTime,
+                    } as any;
+                }
             }
 
             await service.save();
@@ -751,7 +769,7 @@ class ServiceOptimizationService {
                         name: cat.name,
                         image: (catImage && urlMap[catImage.toString()]) || null,
                         items: catItems.map((i) => {
-                            const av = (i.availability as IAvailability) ?? { days: [] };
+                            const av = (i.availability as IAvailability | undefined) ?? null;
                             return {
                                 id: i._id.toString(),
                                 name: i.name,
@@ -759,11 +777,9 @@ class ServiceOptimizationService {
                                 discountedPrice: (i as { discountedPrice?: number }).discountedPrice ?? undefined,
                                 description: i.description ?? undefined,
                                 image: (i.image && urlMap[i.image.toString()]) || null,
-                                availability: {
-                                    days: av.days ?? [],
-                                    startTime: av.startTime,
-                                    endTime: av.endTime,
-                                },
+                                availability: av
+                                    ? { days: av.days ?? [], startTime: av.startTime, endTime: av.endTime }
+                                    : { days: [] },
                             };
                         }),
                     };

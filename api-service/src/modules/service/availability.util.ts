@@ -43,21 +43,23 @@ export function convertToMinutes(time: string): number {
 
 /**
  * Determine if a service/item is available at the current time in the given timezone.
- * - No availability (no days/times) => always available.
- * - Otherwise: current day must be in availability.days, and current time in [startTime, endTime].
- * - Overnight: startMinutes > endMinutes => available if current >= start OR current <= end.
+ * - No availability set, or days array is empty => no restriction => always available.
+ * - Otherwise: current day must be in availability.days, and if times are set,
+ *   current time must fall within [startTime, endTime].
+ * - Overnight window: startMinutes > endMinutes => available if current >= start OR current <= end.
  */
 export function isServiceAvailable(
     availability: IAvailability | undefined | null,
     hotelTimezone: string
 ): boolean {
-    if (!availability) {
+    // No restriction configured (null, undefined, or empty days array)
+    if (!availability || !availability.days?.length) {
         return true;
     }
     const { days, startTime, endTime } = availability;
     const now = moment().tz(hotelTimezone);
     const currentDay = now.day(); // 0 = Sunday, 6 = Saturday
-    if (!days?.length || !days.includes(currentDay)) {
+    if (!days.includes(currentDay)) {
         return false;
     }
     if (!startTime || !endTime) {
