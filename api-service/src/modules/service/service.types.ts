@@ -17,6 +17,33 @@ export type {
     PaginationDTO,
 } from "./validator/service.validator.js";
 
+// ==================== TAX ENTRY ====================
+
+export interface ITaxEntry {
+    name: string;
+    rate: number;
+}
+
+/**
+ * Input for service.getServiceItemsForRequest (used by orders module for service requests).
+ * Client sends only itemId + quantity; server resolves name, category, price, taxes.
+ */
+export interface GetServiceItemsForRequestInput {
+    itemId: string;
+    quantity: number;
+}
+
+/** Resolved service item with taxes for service-request bill calculation. */
+export interface GetServiceItemsForRequestResult {
+    itemId: string;
+    itemName: string;
+    categoryId: string;
+    categoryName: string;
+    price: number;
+    quantity: number;
+    taxes: ITaxEntry[];
+}
+
 // ==================== AVAILABILITY ====================
 
 export interface IAvailability {
@@ -40,6 +67,7 @@ export interface IService {
     estimatedTimeMinutes?: number;
     isActive: boolean;
     availability?: IAvailability;
+    taxes?: ITaxEntry[];
     createdAt: Date;
     updatedAt: Date;
 }
@@ -128,6 +156,7 @@ export interface UserServiceItem {
     image: string | null;
     availability: UserServiceItemAvailability;
     isAvailable: boolean;
+    taxes?: ITaxEntry[];
 }
 
 export interface UserServiceCategory {

@@ -48,6 +48,13 @@ export const UpdateCategorySchema = z.object({
     availability: AvailabilitySchema.nullable().optional(),
 });
 
+// ==================== TAX ENTRY SCHEMA ====================
+
+const TaxEntrySchema = z.object({
+    name: z.string().min(1, "Tax name is required").max(50, "Tax name must not exceed 50 characters").trim(),
+    rate: z.number().min(0, "Tax rate must be non-negative").max(100, "Tax rate must not exceed 100"),
+});
+
 // ==================== SERVICE SCHEMAS ====================
 
 export const CreateServiceSchema = z.object({
@@ -59,6 +66,7 @@ export const CreateServiceSchema = z.object({
     price: PriceField.default(0),
     estimatedTimeMinutes: z.number().int().min(1, "Estimated time must be at least 1 minute").optional(),
     availability: AvailabilitySchema.optional(),
+    taxes: z.array(TaxEntrySchema).optional(),
 });
 
 export const UpdateServiceSchema = z.object({
@@ -71,6 +79,7 @@ export const UpdateServiceSchema = z.object({
     estimatedTimeMinutes: z.number().int().min(1).nullable().optional(),
     isActive: z.boolean().optional(),
     availability: AvailabilitySchema.nullable().optional(),
+    taxes: z.array(TaxEntrySchema).nullable().optional(),
 });
 
 // ==================== PAGINATION SCHEMA ====================

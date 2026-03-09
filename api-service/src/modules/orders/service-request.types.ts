@@ -10,6 +10,14 @@ export interface ActiveServiceRequestSummary {
     createdAt: string;
 }
 
+/** Bill breakdown (same shape as food order). */
+export interface ServiceRequestBill {
+    subtotal: number;
+    serviceCharge: number;
+    gstAndOther: number;
+    toPay: number;
+}
+
 /** Full shape returned for the service-request status page carousel. */
 export interface ActiveServiceRequest {
     _id: string;
@@ -22,6 +30,7 @@ export interface ActiveServiceRequest {
         quantity: number;
     }>;
     totalAmount: number;
+    bill: ServiceRequestBill;
     /** Set when staff moves to ACCEPTED. */
     acceptedAt: string | null;
     /** Set when staff moves to IN_PROGRESS. */
@@ -86,6 +95,7 @@ export interface ServiceRequestListItem {
         quantity: number;
     }>;
     totalAmount: number;
+    bill: ServiceRequestBill;
     note: string | null;
     status: string;
     paymentStatus: string;

@@ -1,23 +1,32 @@
 import { Types } from "mongoose";
 import ServiceRequestModel, { type ServiceRequestStatus } from "./db/service-request.model.js";
-import {
-    ACTIVE_SERVICE_REQUEST_STATUSES,
-} from "./service-request.types.js";
+import { ACTIVE_SERVICE_REQUEST_STATUSES } from "./service-request.types.js";
 import type {
     ServiceRequestListItem,
     ServiceRequestListResponse,
     ActiveServiceRequestSummary,
     ActiveServiceRequest,
+    ServiceRequestBill,
 } from "./service-request.types.js";
-import { ServiceItemModel } from "../service/db/item.model.js";
-import { ServiceCategoryModel } from "../service/db/category.model.js";
+import { computeBillFromTaxableLines } from "./bill.util.js";
+import serviceOptimizationService from "../service/service.service.js";
 import hospitalityService from "../hospitality/hospitality.service.js";
 import authService from "../auth/auth.service.js";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-function computeTotalAmount(items: Array<{ price: number; quantity: number }>): number {
-    return items.reduce((sum, i) => sum + i.price * i.quantity, 0);
+function normalizeBill(o: Record<string, unknown>): ServiceRequestBill {
+    const total = (o.totalAmount as number) ?? 0;
+    const b = o.bill as Partial<ServiceRequestBill> | undefined;
+    if (b && typeof b.subtotal === "number" && typeof b.toPay === "number") {
+        return {
+            subtotal: b.subtotal,
+            serviceCharge: b.serviceCharge ?? 0,
+            gstAndOther: b.gstAndOther ?? 0,
+            toPay: b.toPay,
+        };
+    }
+    return { subtotal: total, serviceCharge: 0, gstAndOther: 0, toPay: total };
 }
 
 function requestDocToListItem(o: Record<string, unknown>): ServiceRequestListItem {
@@ -29,6 +38,7 @@ function requestDocToListItem(o: Record<string, unknown>): ServiceRequestListIte
         roomNumber: o.roomNumber as string,
         items: (o.items as unknown[]) as ServiceRequestListItem["items"],
         totalAmount: o.totalAmount as number,
+        bill: normalizeBill(o),
         note: (o.note as string) ?? null,
         status: o.status as string,
         paymentStatus: o.paymentStatus as string,
@@ -112,65 +122,25 @@ export const serviceRequestService = {
             roomNumber = sessionResult.data.roomNumber;
         }
 
-        // ── Validate & enrich items from DB (server-authoritative) ────────
-        const itemIds = params.items.map((i) => new Types.ObjectId(i.itemId));
+        // ── Resolve & validate items via service module (DDD); compute bill from item taxes ────────
+        const resolved = await serviceOptimizationService.getServiceItemsForRequest(hotelId, params.items);
 
-        const dbItems = await ServiceItemModel.find({
-            _id: { $in: itemIds },
-            hotelId: new Types.ObjectId(hotelId),
-        })
-            .select("_id name categoryId price isActive")
-            .lean();
-
-        // All requested items must exist and belong to this hotel
-        if (dbItems.length !== params.items.length) {
-            const foundIds = new Set(dbItems.map((i) => (i._id as Types.ObjectId).toString()));
-            const missing = params.items
-                .filter((i) => !foundIds.has(i.itemId))
-                .map((i) => i.itemId);
-            throw new Error(`Items not found or do not belong to this hotel: ${missing.join(", ")}`);
-        }
-
-        // All items must be active (not closed by management)
-        const unavailable = dbItems.filter((i) => !i.isActive);
-        if (unavailable.length > 0) {
-            throw new Error(`Items are currently unavailable: ${unavailable.map((i) => i.name).join(", ")}`);
-        }
-
-        // Fetch category names in one query
-        const categoryIds = [...new Set(dbItems.map((i) => (i.categoryId as Types.ObjectId).toString()))];
-        const categories = await ServiceCategoryModel.find({
-            _id: { $in: categoryIds.map((id) => new Types.ObjectId(id)) },
-        })
-            .select("_id name isActive")
-            .lean();
-
-        // Category must also be active
-        const inactiveCategories = categories.filter((c) => !c.isActive);
-        if (inactiveCategories.length > 0) {
-            throw new Error(`Service categories are currently unavailable: ${inactiveCategories.map((c) => c.name).join(", ")}`);
-        }
-
-        const categoryNameMap = new Map(
-            categories.map((c) => [(c._id as Types.ObjectId).toString(), c.name as string])
+        const bill = computeBillFromTaxableLines(
+            resolved.map((r) => ({
+                price: r.price,
+                quantity: r.quantity,
+                taxes: r.taxes,
+            }))
         );
 
-        // Build quantity lookup from client input
-        const quantityMap = new Map(params.items.map((i) => [i.itemId, i.quantity]));
-
-        const resolvedItems = dbItems.map((dbItem) => {
-            const catId = (dbItem.categoryId as Types.ObjectId).toString();
-            return {
-                itemId: dbItem._id as Types.ObjectId,
-                itemName: dbItem.name as string,
-                categoryId: dbItem.categoryId as Types.ObjectId,
-                categoryName: categoryNameMap.get(catId) ?? "",
-                price: dbItem.price as number,
-                quantity: quantityMap.get((dbItem._id as Types.ObjectId).toString()) ?? 1,
-            };
-        });
-
-        const totalAmount = computeTotalAmount(resolvedItems);
+        const resolvedItems = resolved.map((r) => ({
+            itemId: new Types.ObjectId(r.itemId),
+            itemName: r.itemName,
+            categoryId: new Types.ObjectId(r.categoryId),
+            categoryName: r.categoryName,
+            price: r.price,
+            quantity: r.quantity,
+        }));
 
         return ServiceRequestModel.create({
             userId: new Types.ObjectId(params.userId),
@@ -178,7 +148,13 @@ export const serviceRequestService = {
             roomSessionId: new Types.ObjectId(roomSessionId),
             roomNumber,
             items: resolvedItems,
-            totalAmount,
+            totalAmount: bill.toPay,
+            bill: {
+                subtotal: bill.subtotal,
+                serviceCharge: bill.serviceCharge,
+                gstAndOther: bill.gstAndOther,
+                toPay: bill.toPay,
+            },
             note: params.note ?? null,
         });
     },
@@ -404,6 +380,7 @@ export const serviceRequestService = {
 
         return docs.map((d) => {
             const rawItems = (d.items as Array<{ itemName: string; categoryName: string; quantity: number }>) ?? [];
+            const bill = normalizeBill(d as unknown as Record<string, unknown>);
 
             return {
                 _id: (d._id as { toString(): string }).toString(),
@@ -416,6 +393,7 @@ export const serviceRequestService = {
                     quantity: i.quantity,
                 })),
                 totalAmount: d.totalAmount as number,
+                bill,
                 acceptedAt: d.acceptedAt ? (d.acceptedAt as Date).toISOString() : null,
                 startedAt: d.startedAt ? (d.startedAt as Date).toISOString() : null,
                 createdAt: (d.createdAt as Date).toISOString(),

@@ -18,6 +18,41 @@ export type {
     PaginationDTO,
 } from "./validator/menu.validator.js";
 
+// ==================== TAX ENTRY ====================
+
+export interface ITaxEntry {
+    name: string;
+    rate: number;
+}
+
+/**
+ * Input shape for menu.getItemsWithTaxes (used by orders module for food orders).
+ * Client-sent item line: identity, price, quantity. Server validates and returns canonical data with taxes.
+ */
+export interface GetItemsWithTaxesInput {
+    itemId: string;
+    itemName: string;
+    price: number;
+    discountedPrice?: number;
+    quantity: number;
+    variantId?: string;
+    variantName?: string;
+    isUpsell?: boolean;
+}
+
+/** Resolved menu item with taxes for order bill calculation. Prices are server-validated. */
+export interface GetItemsWithTaxesResult {
+    itemId: string;
+    itemName: string;
+    price: number;
+    discountedPrice?: number;
+    quantity: number;
+    variantId?: string;
+    variantName?: string;
+    isUpsell: boolean;
+    taxes: ITaxEntry[];
+}
+
 // ==================== AVAILABILITY ====================
 
 export interface IAvailability {
@@ -64,6 +99,7 @@ export interface IItem {
     isPopular: boolean;
     isActive: boolean;
     availability?: IAvailability;
+    taxes?: ITaxEntry[];
     suggestedItemIds: Types.ObjectId[];
     createdAt: Date;
     updatedAt: Date;
@@ -186,6 +222,7 @@ export interface UserMenuItem {
     isAvailable: boolean;
     hasVariants: boolean;
     type: "veg" | "non-veg" | "egg";
+    taxes?: ITaxEntry[];
 }
 
 export interface UserMenuCategory {
@@ -219,11 +256,14 @@ export interface ItemDetailSuggestedItem {
     discountedPrice?: number;
     isAvailable: boolean;
     type: "veg" | "non-veg" | "egg";
+    /** Per-item taxes (same for all variants of an item). */
+    taxes?: ITaxEntry[];
 }
 
 export interface ItemDetailForCustomer {
     id: string;
     name: string;
+    taxes?: ITaxEntry[];
     price: number;
     discountedPrice?: number;
     description?: string;

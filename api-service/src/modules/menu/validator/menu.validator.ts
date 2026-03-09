@@ -29,6 +29,13 @@ export const AvailabilitySchema = z.object({
     { message: "Start time must be before end time" }
 );
 
+// ==================== TAX ENTRY SCHEMA ====================
+
+const TaxEntrySchema = z.object({
+    name: z.string().min(1, "Tax name is required").max(50, "Tax name must not exceed 50 characters").trim(),
+    rate: z.number().min(0, "Tax rate must be non-negative").max(100, "Tax rate must not exceed 100"),
+});
+
 // ==================== VARIANT SCHEMA ====================
 
 export const VariantSchema = z.object({
@@ -85,6 +92,7 @@ export const CreateItemSchema = z.object({
     discountedPrice: PriceField.optional(),
     isPopular: z.boolean().default(false),
     availability: AvailabilitySchema.optional(),
+    taxes: z.array(TaxEntrySchema).optional(),
     suggestedItemIds: z.array(MongoIdField).optional(),
     variants: z.array(VariantSchema).optional(),
 }).refine(
@@ -122,6 +130,7 @@ export const UpdateItemSchema = z.object({
     isPopular: z.boolean().optional(),
     isActive: z.boolean().optional(),
     availability: AvailabilitySchema.nullable().optional(),
+    taxes: z.array(TaxEntrySchema).nullable().optional(),
     suggestedItemIds: z.array(MongoIdField).optional(),
     variants: z.array(VariantSchema.extend({
         _id: MongoIdField.optional(), // For updating existing variants

@@ -34,6 +34,14 @@ const ServiceRequestSchema = new Schema(
         items: { type: [ServiceRequestItemSchema], required: true },
         totalAmount: { type: Number, required: true, min: 0 },
 
+        /** Bill breakdown: subtotal, no service charge, gstAndOther from item taxes, toPay. Optional for backward compatibility. */
+        bill: {
+            subtotal: { type: Number },
+            serviceCharge: { type: Number },
+            gstAndOther: { type: Number },
+            toPay: { type: Number },
+        },
+
         /** Optional free-text note from the guest (e.g. "collect after 3pm") */
         note: { type: String, default: null },
 

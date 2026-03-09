@@ -1,11 +1,8 @@
-import { Types } from "mongoose";
 import FoodOrderModel, {
     type FoodOrderChannelType,
     type FoodOrderSourceType,
 } from "./db/food-order.model.js";
-import {
-    ACTIVE_FOOD_ORDER_STATUSES,
-} from "./food-order.types.js";
+import { ACTIVE_FOOD_ORDER_STATUSES } from "./food-order.types.js";
 import type {
     OrderItemInput,
     OrderListResponse,
@@ -13,28 +10,13 @@ import type {
     ActiveFoodOrderSummary,
     ActiveFoodOrder,
 } from "./food-order.types.js";
+import { computeBillFromTaxableLines } from "./bill.util.js";
+import menuService from "../menu/menu.service.js";
 import hospitalityService from "../hospitality/hospitality.service.js";
 import authService from "../auth/auth.service.js";
 import { publishFoodOrderEvent } from "./order.analytics.publisher.js";
 
 type OrderItemInputInternal = OrderItemInput;
-
-function computeBillAndCount(items: OrderItemInputInternal[]): {
-    bill: { subtotal: number; serviceCharge: number; gstAndOther: number; toPay: number };
-    count: number;
-} {
-    let subtotal = 0;
-    let count = 0;
-    for (const it of items) {
-        const price = it.discountedPrice ?? it.price;
-        subtotal += price * it.quantity;
-        count += it.quantity;
-    }
-    return {
-        bill: { subtotal, serviceCharge: 0, gstAndOther: 0, toPay: subtotal },
-        count,
-    };
-}
 
 export type CreateFoodOrderParams = {
     hotelId: string;
@@ -112,7 +94,28 @@ export const foodOrderService = {
 
     createFoodOrder: async (params: CreateFoodOrderParams) => {
         validateChannelFields(params);
-        const { bill, count } = computeBillAndCount(params.items);
+
+        const resolved = await menuService.getItemsWithTaxes(params.hotelId, params.items);
+        const bill = computeBillFromTaxableLines(
+            resolved.map((r) => ({
+                price: r.price,
+                discountedPrice: r.discountedPrice,
+                quantity: r.quantity,
+                taxes: r.taxes,
+            }))
+        );
+        const count = resolved.reduce((sum, r) => sum + r.quantity, 0);
+        const itemsToStore = resolved.map((r) => ({
+            itemId: r.itemId,
+            itemName: r.itemName,
+            price: r.price,
+            discountedPrice: r.discountedPrice,
+            quantity: r.quantity,
+            variantId: r.variantId,
+            variantName: r.variantName,
+            isUpsell: r.isUpsell,
+        }));
+
         const doc = await FoodOrderModel.create({
             hotelId: params.hotelId,
             placedById: params.placedById,
@@ -125,7 +128,7 @@ export const foodOrderService = {
             tableNumber: params.tableNumber ?? null,
             zone: params.zone ?? null,
             cookingRequest: params.cookingRequest ?? null,
-            items: params.items,
+            items: itemsToStore,
             bill,
             count,
         });

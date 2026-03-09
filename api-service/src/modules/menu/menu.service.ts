@@ -29,8 +29,10 @@ import {
     ItemDetailForCustomer,
     ItemDetailVariant,
     ItemDetailSuggestedItem,
+    GetItemsWithTaxesInput,
+    GetItemsWithTaxesResult,
 } from "./menu.types.js";
-import type { IAvailability } from "./menu.types.js";
+import type { IAvailability, ITaxEntry } from "./menu.types.js";
 import logger from "../../helpers/logger/index.js";
 import { publishAuditEvent } from "../audit/audit.publisher.js";
 import { isItemAvailable } from "./availability.util.js";
@@ -626,6 +628,7 @@ class MenuService {
                             maxVariantPrice: variantPriceRange?.maxVariantPrice,
                             isPopular: dto.isPopular ?? false,
                             availability: dto.availability,
+                            taxes: dto.taxes,
                             suggestedItemIds: dto.suggestedItemIds?.map((id) => new Types.ObjectId(id)),
                         },
                     ],
@@ -742,6 +745,9 @@ class MenuService {
                         endTime: dto.availability.endTime,
                     } as any;
                 }
+            }
+            if (dto.taxes !== undefined) {
+                item.set("taxes", dto.taxes ?? []);
             }
             if (dto.suggestedItemIds !== undefined) {
                 // Validate cross-hotel ownership before persisting
@@ -1104,6 +1110,7 @@ class MenuService {
         hasVariants: boolean;
         availability?: IAvailability;
         type?: "veg" | "non-veg" | "egg";
+        taxes?: ITaxEntry[];
     } => ({} as any);
 
     /**
@@ -1140,7 +1147,7 @@ class MenuService {
                 isActive: true,
             })
                 .sort({ sortOrder: 1 })
-                .select("categoryId name description price discountedPrice minVariantPrice hasVariants availability image type")
+                .select("categoryId name description price discountedPrice minVariantPrice hasVariants availability image type taxes")
                 .lean();
             const itemImageIds = [...new Set(items.map((i) => i.image?.toString()).filter(Boolean) as string[])];
             const categoryImageIds = [...new Set(categories.map((c) => (c as { image?: Types.ObjectId }).image?.toString()).filter(Boolean) as string[])];
@@ -1172,6 +1179,7 @@ class MenuService {
                                 hasVariants: i.hasVariants ?? false,
                                 availability: i.availability as IAvailability | undefined,
                                 type: (i as { type?: "veg" | "non-veg" | "egg" }).type ?? "veg",
+                                taxes: (i as { taxes?: ITaxEntry[] }).taxes ?? [],
                             };
                         }),
                     };
@@ -1195,6 +1203,7 @@ class MenuService {
                     isAvailable: isItemAvailable(it.availability, hotelTimezone),
                     hasVariants: it.hasVariants,
                     type: (it as { type?: "veg" | "non-veg" | "egg" }).type ?? "veg",
+                    taxes: (it as { taxes?: ITaxEntry[] }).taxes ?? [],
                 })) as UserMenuItem[],
             })) as UserMenuCategory[],
         };
@@ -1216,7 +1225,7 @@ class MenuService {
             hotelId: new Types.ObjectId(hotelId),
             isActive: true,
         })
-            .select("name description image price discountedPrice minVariantPrice hasVariants type availability categoryId suggestedItemIds")
+            .select("name description image price discountedPrice minVariantPrice hasVariants type availability categoryId suggestedItemIds taxes")
             .lean();
         if (!item) {
             return { success: false, message: "Item not found" };
@@ -1272,7 +1281,7 @@ class MenuService {
                 hotelId: new Types.ObjectId(hotelId),
                 isActive: true,
             })
-                .select("name price discountedPrice hasVariants type availability")
+                .select("name price discountedPrice hasVariants type availability taxes")
                 .lean();
             const suggestedIds = suggestedItems.map((s) => s._id.toString());
             const suggestedVariants = await VariantModel.find({
@@ -1294,6 +1303,7 @@ class MenuService {
                 const itemType = (s.type as "veg" | "non-veg" | "egg") ?? "veg";
                 const sAvailability = s.availability as IAvailability | undefined;
                 const sIsAvailable = isItemAvailable(sAvailability, hotelTimezone);
+                const itemTaxes = (s as { taxes?: ITaxEntry[] }).taxes ?? [];
                 if (s.hasVariants) {
                     const vList = variantsByItemId.get(sid) ?? [];
                     for (const v of vList) {
@@ -1305,6 +1315,7 @@ class MenuService {
                             discountedPrice: v.discountedPrice ?? undefined,
                             isAvailable: sIsAvailable,
                             type: itemType,
+                            taxes: itemTaxes,
                         });
                     }
                 } else {
@@ -1316,6 +1327,7 @@ class MenuService {
                         discountedPrice: s.discountedPrice ?? undefined,
                         isAvailable: sIsAvailable,
                         type: itemType,
+                        taxes: itemTaxes,
                     });
                 }
             }
@@ -1339,10 +1351,125 @@ class MenuService {
                 image: imageUrl,
                 isAvailable: itemIsAvailable,
                 type: (item.type as "veg" | "non-veg" | "egg") ?? "veg",
+                taxes: (item as { taxes?: ITaxEntry[] }).taxes ?? [],
                 variants: variantList,
                 suggestedItems: suggestedItemsFlat,
             },
         };
+    };
+
+    /**
+     * Resolve and validate menu items for order placement (DDD: used by orders module).
+     * Validates item exists, belongs to hotel, is active; validates price/discountedPrice (incl. variant).
+     * Returns canonical item data with taxes for bill calculation. Throws on validation failure.
+     */
+    getItemsWithTaxes = async (
+        hotelId: string,
+        items: GetItemsWithTaxesInput[]
+    ): Promise<GetItemsWithTaxesResult[]> => {
+        if (items.length === 0) return [];
+
+        const round2 = (n: number) => Math.round(n * 100) / 100;
+        const hotelOid = new Types.ObjectId(hotelId);
+        const itemIds = [...new Set(items.map((i) => i.itemId))];
+
+        const dbItems = await ItemModel.find({
+            _id: { $in: itemIds.map((id) => new Types.ObjectId(id)) },
+            hotelId: hotelOid,
+            isActive: true,
+        })
+            .select("_id name price discountedPrice hasVariants taxes")
+            .lean();
+
+        const itemMap = new Map<string, (typeof dbItems)[0]>();
+        for (const i of dbItems) itemMap.set((i._id as Types.ObjectId).toString(), i);
+
+        const variantItemIds = items.filter((i) => i.variantId).map((i) => i.itemId);
+        let variantsByItemId = new Map<string, Array<{ _id: Types.ObjectId; itemId: Types.ObjectId; name: string; price: number; discountedPrice?: number }>>();
+        if (variantItemIds.length > 0) {
+            const variantIds = items.map((i) => i.variantId).filter(Boolean) as string[];
+            const variants = await VariantModel.find({
+                _id: { $in: variantIds.map((id) => new Types.ObjectId(id)) },
+                hotelId: hotelOid,
+                itemId: { $in: variantItemIds.map((id) => new Types.ObjectId(id)) },
+                isActive: true,
+            })
+                .select("_id itemId name price discountedPrice")
+                .lean();
+            for (const v of variants) {
+                const key = (v.itemId as Types.ObjectId).toString();
+                if (!variantsByItemId.has(key)) variantsByItemId.set(key, []);
+                variantsByItemId.get(key)!.push(v as { _id: Types.ObjectId; itemId: Types.ObjectId; name: string; price: number; discountedPrice?: number });
+            }
+        }
+
+        const result: GetItemsWithTaxesResult[] = [];
+        for (const line of items) {
+            const dbItem = itemMap.get(line.itemId);
+            if (!dbItem) {
+                throw new Error(`Item not found or inactive: ${line.itemId}`);
+            }
+            const hasVariants = (dbItem as { hasVariants?: boolean }).hasVariants ?? false;
+            const variantId = line.variantId?.trim();
+            const variantName = line.variantName?.trim();
+
+            if (hasVariants && !variantId) {
+                throw new Error(`Item ${line.itemId} has variants; variantId is required`);
+            }
+            if (!hasVariants && variantId) {
+                throw new Error(`Item ${line.itemId} does not have variants; variantId must not be sent`);
+            }
+
+            let unitPrice: number;
+            let unitDiscountedPrice: number | undefined;
+            let name: string;
+
+            if (variantId) {
+                const list = variantsByItemId.get(line.itemId) ?? [];
+                const variant = list.find((v) => (v._id as Types.ObjectId).toString() === variantId);
+                if (!variant) {
+                    throw new Error(`Variant not found or inactive: ${variantId} for item ${line.itemId}`);
+                }
+                unitPrice = variant.price;
+                unitDiscountedPrice = variant.discountedPrice;
+                name = `${dbItem.name} ${variant.name}`.trim();
+            } else {
+                unitPrice = (dbItem.price as number) ?? 0;
+                unitDiscountedPrice = dbItem.discountedPrice as number | undefined;
+                name = dbItem.name as string;
+            }
+
+            const clientPrice = round2(line.price);
+            const clientDiscounted = line.discountedPrice != null ? round2(line.discountedPrice) : undefined;
+            const dbPrice = round2(unitPrice);
+            const dbDiscounted = unitDiscountedPrice != null ? round2(unitDiscountedPrice) : undefined;
+
+            if (clientPrice !== dbPrice) {
+                throw new Error(`Price mismatch for item ${line.itemId}${variantId ? ` variant ${variantId}` : ""}: expected ${dbPrice}, got ${clientPrice}`);
+            }
+            if (clientDiscounted !== undefined) {
+                if (dbDiscounted === undefined) {
+                    throw new Error(`Item ${line.itemId} does not have a discounted price`);
+                }
+                if (clientDiscounted !== dbDiscounted) {
+                    throw new Error(`Discounted price mismatch for item ${line.itemId}: expected ${dbDiscounted}, got ${clientDiscounted}`);
+                }
+            }
+
+            const taxes = (dbItem as { taxes?: ITaxEntry[] }).taxes ?? [];
+            result.push({
+                itemId: line.itemId,
+                itemName: name,
+                price: unitPrice,
+                discountedPrice: unitDiscountedPrice,
+                quantity: line.quantity,
+                variantId: variantId || undefined,
+                variantName: variantName || undefined,
+                isUpsell: line.isUpsell ?? false,
+                taxes,
+            });
+        }
+        return result;
     };
 }
 

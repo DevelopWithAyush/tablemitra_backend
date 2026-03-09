@@ -20,6 +20,9 @@ import {
     UserServiceCategory,
     UserServiceItem,
     IAvailability,
+    ITaxEntry,
+    GetServiceItemsForRequestInput,
+    GetServiceItemsForRequestResult,
 } from "./service.types.js";
 import logger from "../../helpers/logger/index.js";
 import { publishAuditEvent } from "../audit/audit.publisher.js";
@@ -458,6 +461,7 @@ class ServiceOptimizationService {
                 price: dto.price ?? 0,
                 estimatedTimeMinutes: dto.estimatedTimeMinutes,
                 availability: dto.availability,
+                taxes: dto.taxes,
             });
 
             if (auditContext) {
@@ -544,6 +548,9 @@ class ServiceOptimizationService {
                         endTime: dto.availability.endTime,
                     } as any;
                 }
+            }
+            if (dto.taxes !== undefined) {
+                service.taxes = (dto.taxes ?? []) as any;
             }
 
             await service.save();
@@ -723,6 +730,7 @@ class ServiceOptimizationService {
             image: string | null;
             availability: IAvailability;
             isAvailable?: never;
+            taxes?: ITaxEntry[];
         };
         type RawCategory = { id: string; name: string; image: string | null; items: RawItem[] };
 
@@ -748,7 +756,7 @@ class ServiceOptimizationService {
                 isActive: true,
             })
                 .sort({ sortOrder: 1 })
-                .select("categoryId name description price image availability")
+                .select("categoryId name description price image availability taxes")
                 .lean();
             const itemImageIds = [...new Set(items.map((i) => i.image?.toString()).filter(Boolean) as string[])];
             const categoryImageIds = [...new Set(categories.map((c) => (c as { image?: Types.ObjectId }).image?.toString()).filter(Boolean) as string[])];
@@ -780,6 +788,7 @@ class ServiceOptimizationService {
                                 availability: av
                                     ? { days: av.days ?? [], startTime: av.startTime, endTime: av.endTime }
                                     : { days: [] },
+                                taxes: (i as { taxes?: ITaxEntry[] }).taxes ?? [],
                             };
                         }),
                     };
@@ -802,10 +811,74 @@ class ServiceOptimizationService {
                     image: it.image,
                     availability: formatAvailabilityForResponse(it.availability),
                     isAvailable: isServiceAvailable(it.availability, hotelTimezone),
+                    taxes: (it as { taxes?: ITaxEntry[] }).taxes ?? [],
                 })) as UserServiceItem[],
             })) as UserServiceCategory[],
         };
         return { success: true, data: response };
+    };
+
+    /**
+     * Resolve and validate service items for request placement (DDD: used by orders module).
+     * Validates items exist, belong to hotel, are active; category must be active.
+     * Returns canonical item data with taxes for bill calculation. Throws on validation failure.
+     */
+    getServiceItemsForRequest = async (
+        hotelId: string,
+        items: GetServiceItemsForRequestInput[]
+    ): Promise<GetServiceItemsForRequestResult[]> => {
+        if (items.length === 0) return [];
+
+        const hotelOid = new Types.ObjectId(hotelId);
+        const itemIds = items.map((i) => new Types.ObjectId(i.itemId));
+
+        const dbItems = await ServiceItemModel.find({
+            _id: { $in: itemIds },
+            hotelId: hotelOid,
+            isActive: true,
+        })
+            .select("_id name categoryId price taxes")
+            .lean();
+
+        if (dbItems.length !== items.length) {
+            const foundIds = new Set(dbItems.map((i) => (i._id as Types.ObjectId).toString()));
+            const missing = items.filter((i) => !foundIds.has(i.itemId)).map((i) => i.itemId);
+            throw new Error(`Service items not found or inactive: ${missing.join(", ")}`);
+        }
+
+        const categoryIds = [...new Set(dbItems.map((i) => (i.categoryId as Types.ObjectId).toString()))];
+        const categories = await ServiceCategoryModel.find({
+            _id: { $in: categoryIds.map((id) => new Types.ObjectId(id)) },
+            hotelId: hotelOid,
+        })
+            .select("_id name isActive")
+            .lean();
+
+        const inactiveCategories = categories.filter((c) => !(c as { isActive?: boolean }).isActive);
+        if (inactiveCategories.length > 0) {
+            const names = inactiveCategories.map((c) => (c as { name: string }).name).join(", ");
+            throw new Error(`Service categories are currently unavailable: ${names}`);
+        }
+
+        const categoryMap = new Map(
+            categories.map((c) => [(c._id as Types.ObjectId).toString(), (c as { name: string }).name])
+        );
+        const quantityMap = new Map(items.map((i) => [i.itemId, i.quantity]));
+
+        return dbItems.map((dbItem) => {
+            const idStr = (dbItem._id as Types.ObjectId).toString();
+            const catIdStr = (dbItem.categoryId as Types.ObjectId).toString();
+            const taxes = (dbItem as { taxes?: ITaxEntry[] }).taxes ?? [];
+            return {
+                itemId: idStr,
+                itemName: dbItem.name as string,
+                categoryId: catIdStr,
+                categoryName: categoryMap.get(catIdStr) ?? "",
+                price: dbItem.price as number,
+                quantity: quantityMap.get(idStr) ?? 1,
+                taxes,
+            };
+        });
     };
 }
 

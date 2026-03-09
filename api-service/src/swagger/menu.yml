@@ -794,6 +794,23 @@ components:
           pattern: '^([01]\d|2[0-3]):([0-5]\d)$'
           example: "23:00"
 
+    TaxEntry:
+      type: object
+      required: [name, rate]
+      description: Per-item tax (name and rate %)
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 50
+          example: "GST"
+        rate:
+          type: number
+          minimum: 0
+          maximum: 100
+          description: Tax rate percentage
+          example: 5
+
     # ==================== CATEGORY SCHEMAS ====================
     Category:
       type: object
@@ -1028,6 +1045,11 @@ components:
           type: boolean
         availability:
           $ref: "#/components/schemas/Availability"
+        taxes:
+          type: array
+          items:
+            $ref: "#/components/schemas/TaxEntry"
+          description: Taxes applied to this item
         suggestedItemIds:
           type: array
           items:
@@ -1150,6 +1172,11 @@ components:
           default: false
         availability:
           $ref: "#/components/schemas/Availability"
+        taxes:
+          type: array
+          items:
+            $ref: "#/components/schemas/TaxEntry"
+          description: Optional list of taxes applied to this item (name + rate %)
         suggestedItemIds:
           type: array
           items:
@@ -1203,6 +1230,12 @@ components:
           type: boolean
         availability:
           $ref: "#/components/schemas/Availability"
+        taxes:
+          type: array
+          nullable: true
+          items:
+            $ref: "#/components/schemas/TaxEntry"
+          description: Optional list of taxes; omit to leave unchanged, send [] to clear
         suggestedItemIds:
           type: array
           items:
@@ -1275,6 +1308,11 @@ components:
           type: string
           enum: [veg, non-veg, egg]
           example: "veg"
+        taxes:
+          type: array
+          items:
+            $ref: "#/components/schemas/TaxEntry"
+          description: Taxes applied to this item
     UserMenuCategory:
       type: object
       properties:

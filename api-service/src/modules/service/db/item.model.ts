@@ -1,6 +1,14 @@
 import { Schema, model, Types } from "mongoose";
 import { AvailabilitySchema } from "./availability.model.js";
 
+const TaxEntrySchema = new Schema(
+    {
+        name: { type: String, required: true, trim: true, maxlength: 50 },
+        rate: { type: Number, required: true, min: 0, max: 100 },
+    },
+    { _id: false }
+);
+
 const ServiceItemSchema = new Schema(
     {
         hotelId: {
@@ -69,6 +77,7 @@ const ServiceItemSchema = new Schema(
             type: AvailabilitySchema
         },
 
+        taxes: [TaxEntrySchema],
     },
     { timestamps: true }
 );

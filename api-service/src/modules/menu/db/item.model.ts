@@ -2,6 +2,14 @@
 import { Schema, model, Types } from "mongoose";
 import { AvailabilitySchema } from "./availability.model.js";
 
+const TaxEntrySchema = new Schema(
+    {
+        name: { type: String, required: true, trim: true, maxlength: 50 },
+        rate: { type: Number, required: true, min: 0, max: 100 },
+    },
+    { _id: false }
+);
+
 const ItemSchema = new Schema(
     {
         hotelId: {
@@ -49,6 +57,8 @@ const ItemSchema = new Schema(
         isActive: { type: Boolean, default: true },
 
         availability: { type: AvailabilitySchema },
+
+        taxes: [TaxEntrySchema],
 
         // Upsell override
         suggestedItemIds: [
