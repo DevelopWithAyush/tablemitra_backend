@@ -45,6 +45,7 @@ const options: swaggerJsdoc.Options = {
             { name: "Orders", description: "Food orders – place order (customer/staff) and list with pagination & search" },
             { name: "Service Requests", description: "Service requests (laundry, housekeeping, amenities, etc.) – place, list, and update status" },
             { name: "Active Orders", description: "Customer active-order tracking – bottom bar summary and full status carousel for food orders and service requests" },
+            { name: "Checkout", description: "Frontdesk checkout – preview room bill, proceed with adjustments, download PDF (CHECK_IN_GUEST)" },
         ],
         components: {
             schemas: {

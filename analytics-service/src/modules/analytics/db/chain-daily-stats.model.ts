@@ -57,6 +57,14 @@ export interface IChainDailyStats extends Document {
     activeHotelCount: number;  // hotels with at least one order/request that day
     totalRoomNights: number;
   };
+
+  checkout?: {
+    checkoutsCount: number;
+    totalDiscountAmount: number;
+    totalDamageCharges: number;
+    totalOtherCharges: number;
+    totalFinalAmount: number;
+  };
 }
 
 const ChainDailyStatsSchema = new Schema<IChainDailyStats>(
@@ -112,6 +120,14 @@ const ChainDailyStatsSchema = new Schema<IChainDailyStats>(
     hotels: {
       activeHotelCount: { type: Number, default: 0 },
       totalRoomNights: { type: Number, default: 0 },
+    },
+
+    checkout: {
+      checkoutsCount: { type: Number, default: 0 },
+      totalDiscountAmount: { type: Number, default: 0 },
+      totalDamageCharges: { type: Number, default: 0 },
+      totalOtherCharges: { type: Number, default: 0 },
+      totalFinalAmount: { type: Number, default: 0 },
     },
   },
   { timestamps: true }

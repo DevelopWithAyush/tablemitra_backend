@@ -487,12 +487,29 @@ class QrCodeService {
             const codes = (rows[0]?.codes ?? []).map((doc: any) => this.mapToInfo(doc)) as IQrCodeInfo[];
 
             const groupByField = type === "ROOM" ? "floor" : "zone";
-            const occupiedRoomsStatsMap = new Map<string, { totalOrders: number; totalFoodOrders: number; totalServiceRequests: number; totalSpend: number }>();
+            const occupiedRoomsMap = new Map<string, { roomSessionId: string; stats: { totalOrders: number; totalFoodOrders: number; totalServiceRequests: number; totalSpend: number } }>();
             if (type === "ROOM") {
                 const hospitalityService = (await import("../hospitality/hospitality.service.js")).default;
-                const occupiedWithStats = await hospitalityService.getOccupiedRoomsWithStats(hotelId);
-                for (const { roomNumber, stats } of occupiedWithStats) {
-                    occupiedRoomsStatsMap.set(roomNumber, stats);
+                const foodOrderService = (await import("../orders/food-order.service.js")).foodOrderService;
+                const serviceRequestService = (await import("../orders/service-request.service.js")).serviceRequestService;
+                const rooms = await hospitalityService.getActiveRoomSessionsForHotel(hotelId);
+                const roomSessionIds = rooms.map((r) => r.roomSessionId);
+                const [foodStats, serviceStats] = await Promise.all([
+                    foodOrderService.getBillableStatsByRoomSessionIds(roomSessionIds),
+                    serviceRequestService.getBillableStatsByRoomSessionIds(roomSessionIds),
+                ]);
+                for (const { roomNumber, roomSessionId } of rooms) {
+                    const food = foodStats.get(roomSessionId) ?? { count: 0, totalSpend: 0 };
+                    const service = serviceStats.get(roomSessionId) ?? { count: 0, totalSpend: 0 };
+                    occupiedRoomsMap.set(roomNumber, {
+                        roomSessionId,
+                        stats: {
+                            totalFoodOrders: food.count,
+                            totalServiceRequests: service.count,
+                            totalOrders: food.count + service.count,
+                            totalSpend: food.totalSpend + service.totalSpend,
+                        },
+                    });
                 }
             }
 
@@ -501,9 +518,12 @@ class QrCodeService {
                 const groupKey = (code[groupByField as keyof IQrCodeInfo] as string) ?? "";
                 const room: IQrCodeInfoWithRoomStatus = { ...code };
                 if (type === "ROOM" && code.roomNumber != null) {
-                    const stats = occupiedRoomsStatsMap.get(code.roomNumber);
-                    room.roomStatus = stats != null ? "OCCUPIED" : "VACANT";
-                    if (stats != null) room.stats = stats;
+                    const occupied = occupiedRoomsMap.get(code.roomNumber);
+                    room.roomStatus = occupied != null ? "OCCUPIED" : "VACANT";
+                    if (occupied != null) {
+                        room.roomSessionId = occupied.roomSessionId;
+                        room.stats = occupied.stats;
+                    }
                 }
                 if (!groupMap.has(groupKey)) groupMap.set(groupKey, []);
                 groupMap.get(groupKey)!.push(room);

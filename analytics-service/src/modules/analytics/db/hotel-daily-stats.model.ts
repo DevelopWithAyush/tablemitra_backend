@@ -69,6 +69,14 @@ export interface IHotelDailyStats extends Document {
     roomNights: number;
     occupancyRate: number;  // 0-1, if total rooms available is known
   };
+
+  checkout?: {
+    checkoutsCount: number;
+    totalDiscountAmount: number;
+    totalDamageCharges: number;
+    totalOtherCharges: number;
+    totalFinalAmount: number;
+  };
 }
 
 const HotelDailyStatsSchema = new Schema<IHotelDailyStats>(
@@ -133,6 +141,14 @@ const HotelDailyStatsSchema = new Schema<IHotelDailyStats>(
       roomsCheckedOut: { type: Number, default: 0 },
       roomNights: { type: Number, default: 0 },
       occupancyRate: { type: Number, default: 0 },
+    },
+
+    checkout: {
+      checkoutsCount: { type: Number, default: 0 },
+      totalDiscountAmount: { type: Number, default: 0 },
+      totalDamageCharges: { type: Number, default: 0 },
+      totalOtherCharges: { type: Number, default: 0 },
+      totalFinalAmount: { type: Number, default: 0 },
     },
   },
   { timestamps: true }

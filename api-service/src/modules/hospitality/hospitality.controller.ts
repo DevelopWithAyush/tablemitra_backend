@@ -121,6 +121,7 @@ class HospitalityController {
         const chainId = typeof req.params.chainId === "string" ? req.params.chainId : req.params.chainId?.[0] ?? "";
         const {
             name, description, address, contact,
+            businessDetails,
             managerPhone, managerName, managerEmail,
             totalRooms, settings, panelSettings,
         } = req.body;
@@ -132,6 +133,7 @@ class HospitalityController {
                 description,
                 address,
                 contact,
+                businessDetails,
                 managerPhone,
                 managerName,
                 managerEmail,
@@ -304,6 +306,7 @@ class HospitalityController {
         const {
             chainId,
             name, description, address, contact,
+            businessDetails,
             managerPhone, managerName, managerEmail,
             totalRooms, settings, panelSettings,
         } = req.body;
@@ -324,6 +327,7 @@ class HospitalityController {
                 description,
                 address,
                 contact,
+                businessDetails,
                 managerPhone,
                 managerName,
                 managerEmail,
@@ -483,7 +487,8 @@ class HospitalityController {
                 message: "Please scan room QR code",
                 data: null,
             };
-            return res.status(200).json({ success: true, ...response });
+            return res.status(200).json({ success: true, ...response }); 
+            
         }
 
         const result = await hospitalityService.getHotelContextForCustomer(hotelId);

@@ -142,21 +142,25 @@ export const serviceRequestService = {
             quantity: r.quantity,
         }));
 
-        return ServiceRequestModel.create({
-            userId: new Types.ObjectId(params.userId),
-            hotelId: new Types.ObjectId(hotelId),
-            roomSessionId: new Types.ObjectId(roomSessionId),
-            roomNumber,
-            items: resolvedItems,
-            totalAmount: bill.toPay,
-            bill: {
-                subtotal: bill.subtotal,
-                serviceCharge: bill.serviceCharge,
-                gstAndOther: bill.gstAndOther,
-                toPay: bill.toPay,
+        const [request] = await ServiceRequestModel.create([
+            {
+                userId: new Types.ObjectId(params.userId),
+                hotelId: new Types.ObjectId(hotelId),
+                roomSessionId: new Types.ObjectId(roomSessionId),
+                roomNumber,
+                items: resolvedItems,
+                totalAmount: bill.toPay,
+                bill: {
+                    subtotal: bill.subtotal,
+                    serviceCharge: bill.serviceCharge,
+                    gstAndOther: bill.gstAndOther,
+                    toPay: bill.toPay,
+                },
+                note: params.note ?? null,
             },
-            note: params.note ?? null,
-        });
+        ]);
+        await hospitalityService.invalidateHotelQrCache(hotelId);
+        return request!;
     },
 
     /**
@@ -261,6 +265,106 @@ export const serviceRequestService = {
     },
 
     /**
+     * Billable stats by room session (for room list / QR). Counts and sum of toPay for requests
+     * that are billable: status not in [REJECTED, CANCELLED], paymentStatus PENDING.
+     * DDD: called by qr-code module when deriving stats for occupied rooms.
+     */
+    getBillableStatsByRoomSessionIds: async (
+        roomSessionIds: string[]
+    ): Promise<Map<string, { count: number; totalSpend: number }>> => {
+        if (roomSessionIds.length === 0) return new Map();
+        const ids = roomSessionIds.map((id) => new Types.ObjectId(id));
+        const rows = await ServiceRequestModel.aggregate<{
+            _id: Types.ObjectId;
+            count: number;
+            totalSpend: number;
+        }>([
+            {
+                $match: {
+                    roomSessionId: { $in: ids },
+                    status: { $nin: ["REJECTED", "CANCELLED"] },
+                    paymentStatus: "PENDING",
+                },
+            },
+            {
+                $group: {
+                    _id: "$roomSessionId",
+                    count: { $sum: 1 },
+                    totalSpend: { $sum: { $ifNull: ["$bill.toPay", "$totalAmount"] } },
+                },
+            },
+        ]);
+        const map = new Map<string, { count: number; totalSpend: number }>();
+        for (const r of rows) {
+            map.set(r._id.toString(), { count: r.count, totalSpend: r.totalSpend });
+        }
+        return map;
+    },
+
+    /**
+     * Get pending-payment service requests for a room session (for checkout).
+     * Excludes REJECTED and CANCELLED. Uses stored bill/totalAmount – no recalculation.
+     * DDD: called by checkout module via service.
+     */
+    getPendingServiceRequestsByRoomSessionId: async (roomSessionId: string) => {
+        const docs = await ServiceRequestModel.find({
+            roomSessionId: new Types.ObjectId(roomSessionId),
+            paymentStatus: "PENDING",
+            status: { $nin: ["REJECTED", "CANCELLED"] },
+        })
+            .select("_id items totalAmount bill createdAt")
+            .sort({ createdAt: 1 })
+            .lean();
+
+        return docs.map((d: Record<string, unknown>) => {
+            const bill = d.bill as Partial<{ subtotal: number; gstAndOther: number; toPay: number }> | undefined;
+            const toPay = bill?.toPay ?? (d.totalAmount as number);
+            return {
+                _id: (d._id as { toString(): string }).toString(),
+                items: (d.items as unknown[]) ?? [],
+                totalAmount: d.totalAmount as number,
+                bill: bill ? { ...bill, toPay } : { subtotal: toPay, gstAndOther: 0, toPay },
+                createdAt: (d.createdAt as Date).toISOString(),
+            };
+        });
+    },
+
+    /**
+     * Get service requests by IDs for bill PDF. DDD: called by checkout module.
+     */
+    getServiceRequestsByIdsForBill: async (requestIds: string[]) => {
+        if (requestIds.length === 0) return [];
+        const docs = await ServiceRequestModel.find({
+            _id: { $in: requestIds.map((id) => new Types.ObjectId(id)) },
+        })
+            .select("items totalAmount bill createdAt")
+            .sort({ createdAt: 1 })
+            .lean();
+
+        return docs.map((d: Record<string, unknown>) => {
+            const bill = d.bill as Partial<{ toPay: number }> | undefined;
+            const toPay = bill?.toPay ?? (d.totalAmount as number);
+            return {
+                items: (d.items as unknown[]) ?? [],
+                totalAmount: d.totalAmount as number,
+                toPay,
+                createdAt: (d.createdAt as Date).toISOString(),
+            };
+        });
+    },
+
+    /**
+     * Mark service requests as paid (called by checkout module on successful checkout).
+     */
+    markServiceRequestsPaid: async (requestIds: string[]): Promise<void> => {
+        const now = new Date();
+        await ServiceRequestModel.updateMany(
+            { _id: { $in: requestIds.map((id) => new Types.ObjectId(id)) } },
+            { $set: { paymentStatus: "PAID", paidAt: now } }
+        );
+    },
+
+    /**
      * Update service request status.
      *
      * Staff transitions (ROOM_SERVICE / FRONTDESK):
@@ -332,6 +436,7 @@ export const serviceRequestService = {
         if (params.newStatus === "CANCELLED") update.cancelledAt = now;
 
         await ServiceRequestModel.findByIdAndUpdate(params.requestId, { $set: update });
+        await hospitalityService.invalidateHotelQrCache(hotelId);
         return ServiceRequestModel.findById(params.requestId).lean();
     },
 

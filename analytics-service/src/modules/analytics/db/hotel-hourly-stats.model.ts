@@ -54,6 +54,14 @@ export interface IHotelHourlyStats extends Document {
     upsellTransactions: number;
     upsellContributionRate: number;
   };
+
+  checkout?: {
+    checkoutsCount: number;
+    totalDiscountAmount: number;
+    totalDamageCharges: number;
+    totalOtherCharges: number;
+    totalFinalAmount: number;
+  };
 }
 
 const HotelHourlyStatsSchema = new Schema<IHotelHourlyStats>(
@@ -106,6 +114,14 @@ const HotelHourlyStatsSchema = new Schema<IHotelHourlyStats>(
       upsellRevenue: { type: Number, default: 0 },
       upsellTransactions: { type: Number, default: 0 },
       upsellContributionRate: { type: Number, default: 0 },
+    },
+
+    checkout: {
+      checkoutsCount: { type: Number, default: 0 },
+      totalDiscountAmount: { type: Number, default: 0 },
+      totalDamageCharges: { type: Number, default: 0 },
+      totalOtherCharges: { type: Number, default: 0 },
+      totalFinalAmount: { type: Number, default: 0 },
     },
   },
   { timestamps: true }

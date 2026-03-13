@@ -1,3 +1,4 @@
+import { ClientSession, Types } from "mongoose";
 import FoodOrderModel, {
     type FoodOrderChannelType,
     type FoodOrderSourceType,
@@ -92,7 +93,10 @@ async function orderToListItemWithCustomer(
 export const foodOrderService = {
     orderToListItemWithCustomer,
 
-    createFoodOrder: async (params: CreateFoodOrderParams) => {
+    createFoodOrder: async (
+        params: CreateFoodOrderParams,
+        txSession?: ClientSession
+    ) => {
         validateChannelFields(params);
 
         const resolved = await menuService.getItemsWithTaxes(params.hotelId, params.items);
@@ -116,7 +120,8 @@ export const foodOrderService = {
             isUpsell: r.isUpsell,
         }));
 
-        const doc = await FoodOrderModel.create({
+        const [doc] = await FoodOrderModel.create(
+            [{
             hotelId: params.hotelId,
             placedById: params.placedById,
             source: params.source,
@@ -131,8 +136,10 @@ export const foodOrderService = {
             items: itemsToStore,
             bill,
             count,
-        });
-        return doc;
+        }],
+            txSession ? { session: txSession } : {}
+        );
+        return doc!;
     },
 
     createGuestRoomOrder: async (
@@ -141,19 +148,23 @@ export const foodOrderService = {
         roomSessionId: string,
         roomNumber: string,
         items: OrderItemInputInternal[],
-        cookingRequest?: string | null
+        cookingRequest?: string | null,
+        txSession?: ClientSession
     ) => {
-        return foodOrderService.createFoodOrder({
-            hotelId,
-            placedById: customerId,
-            source: "GUEST",
-            channelType: "ROOM",
-            customerId,
-            roomSessionId,
-            roomNumber,
-            items,
-            cookingRequest: cookingRequest ?? null,
-        });
+        return foodOrderService.createFoodOrder(
+            {
+                hotelId,
+                placedById: customerId,
+                source: "GUEST",
+                channelType: "ROOM",
+                customerId,
+                roomSessionId,
+                roomNumber,
+                items,
+                cookingRequest: cookingRequest ?? null,
+            },
+            txSession
+        );
     },
 
     /**
@@ -181,7 +192,7 @@ export const foodOrderService = {
             if (!hotelId || !roomSessionId || !roomNumber) {
                 throw new Error("Room context required. Please scan room QR or ensure cookies are set.");
             }
-            return foodOrderService.createGuestRoomOrder(
+            const order = await foodOrderService.createGuestRoomOrder(
                 params.userId,
                 hotelId,
                 roomSessionId,
@@ -189,6 +200,8 @@ export const foodOrderService = {
                 params.items,
                 params.cookingRequest
             );
+            await hospitalityService.invalidateHotelQrCache(hotelId);
+            return order;
         }
 
         // Staff
@@ -218,7 +231,7 @@ export const foodOrderService = {
         }
 
         const { roomSessionId, customerId } = sessionResult.data;
-        return foodOrderService.createFoodOrder({
+        const order = await foodOrderService.createFoodOrder({
             hotelId,
             placedById: params.userId,
             source: "STAFF_FOR_GUEST",
@@ -229,6 +242,8 @@ export const foodOrderService = {
             items: params.items,
             cookingRequest: params.cookingRequest ?? null,
         });
+        await hospitalityService.invalidateHotelQrCache(hotelId);
+        return order;
     },
 
     /**
@@ -271,6 +286,10 @@ export const foodOrderService = {
         if (params.newStatus === "REJECTED") update.rejectedAt = now;
 
         await FoodOrderModel.findByIdAndUpdate(params.orderId, { $set: update });
+
+        if (order.channelType === "ROOM") {
+            await hospitalityService.invalidateHotelQrCache(hotelId);
+        }
 
         const hotelRes = await hospitalityService.getHotelById(hotelId);
         const rawChain = hotelRes.success && hotelRes.data ? (hotelRes.data as { chainId?: { _id?: unknown } | string }).chainId : undefined;
@@ -506,5 +525,99 @@ export const foodOrderService = {
                 hotel,
             };
         });
+    },
+
+    /**
+     * Billable stats by room session (for room list / QR). Counts and sum of toPay for orders
+     * that are billable: status not REJECTED, paymentStatus PENDING, channelType ROOM.
+     * DDD: called by qr-code module when deriving stats for occupied rooms.
+     */
+    getBillableStatsByRoomSessionIds: async (
+        roomSessionIds: string[]
+    ): Promise<Map<string, { count: number; totalSpend: number }>> => {
+        if (roomSessionIds.length === 0) return new Map();
+        const ids = roomSessionIds.map((id) => new Types.ObjectId(id));
+        const rows = await FoodOrderModel.aggregate<{
+            _id: Types.ObjectId;
+            count: number;
+            totalSpend: number;
+        }>([
+            {
+                $match: {
+                    roomSessionId: { $in: ids },
+                    channelType: "ROOM",
+                    status: { $ne: "REJECTED" },
+                    paymentStatus: "PENDING",
+                },
+            },
+            {
+                $group: {
+                    _id: "$roomSessionId",
+                    count: { $sum: 1 },
+                    totalSpend: { $sum: "$bill.toPay" },
+                },
+            },
+        ]);
+        const map = new Map<string, { count: number; totalSpend: number }>();
+        for (const r of rows) {
+            map.set(r._id.toString(), { count: r.count, totalSpend: r.totalSpend });
+        }
+        return map;
+    },
+
+    /**
+     * Get pending-payment food orders for a room session (for checkout).
+     * Excludes REJECTED orders. Uses stored bill values – no recalculation.
+     * DDD: called by checkout module via service.
+     */
+    getPendingFoodOrdersByRoomSessionId: async (roomSessionId: string) => {
+        const docs = await FoodOrderModel.find({
+            roomSessionId: new Types.ObjectId(roomSessionId),
+            channelType: "ROOM",
+            paymentStatus: "PENDING",
+            status: { $ne: "REJECTED" },
+        })
+            .select("_id items bill count createdAt")
+            .sort({ createdAt: 1 })
+            .lean();
+
+        return docs.map((d: Record<string, unknown>) => ({
+            _id: (d._id as { toString(): string }).toString(),
+            items: (d.items as unknown[]) ?? [],
+            bill: d.bill as { subtotal: number; serviceCharge: number; gstAndOther: number; toPay: number },
+            count: d.count as number,
+            createdAt: (d.createdAt as Date).toISOString(),
+        }));
+    },
+
+    /**
+     * Get food orders by IDs for bill PDF (returns items and bill). DDD: called by checkout module.
+     */
+    getFoodOrdersByIdsForBill: async (orderIds: string[]) => {
+        if (orderIds.length === 0) return [];
+        const docs = await FoodOrderModel.find({
+            _id: { $in: orderIds.map((id) => new Types.ObjectId(id)) },
+        })
+            .select("items bill count createdAt")
+            .sort({ createdAt: 1 })
+            .lean();
+
+        return docs.map((d: Record<string, unknown>) => ({
+            items: (d.items as unknown[]) ?? [],
+            bill: d.bill as { subtotal: number; toPay: number },
+            count: d.count as number,
+            createdAt: (d.createdAt as Date).toISOString(),
+        }));
+    },
+
+    /**
+     * Mark food orders as paid (called by checkout module on successful checkout).
+     */
+    markFoodOrdersPaid: async (orderIds: string[]): Promise<void> => {
+        const now = new Date();
+        await FoodOrderModel.updateMany(
+            { _id: { $in: orderIds.map((id) => new Types.ObjectId(id)) } },
+            { $set: { paymentStatus: "PAID", paidAt: now } }
+        );
     },
 };

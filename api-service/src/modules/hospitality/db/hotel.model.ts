@@ -37,6 +37,12 @@ const hotelSchema = new mongoose.Schema({
         email: { type: String, required: true },
         website: { type: String },
     },
+    /** Business registration details – required for bill/invoice. Always shown on checkout bill. */
+    businessDetails: {
+        gstin: { type: String, default: null },
+        pan: { type: String, default: null },
+        fssaiNumber: { type: String, default: null },
+    },
     settings: {
         currency: { type: String, default: "INR" },
         timezone: { type: String, default: "Asia/Kolkata" },

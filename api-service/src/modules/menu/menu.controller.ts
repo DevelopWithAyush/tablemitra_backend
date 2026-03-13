@@ -328,6 +328,7 @@ export const getMenuForUser = asyncHandler(async (req: Request, res: Response) =
     if (!hotelId) {
         return res.status(400).json({
             success: false,
+            code: "hotel_context_required",
             message: "Hotel context required: provide hotelId query or customer_room_hotel_id cookie",
         });
     }
@@ -336,6 +337,7 @@ export const getMenuForUser = asyncHandler(async (req: Request, res: Response) =
     if (!tzResult.success) {
         return res.status(404).json({
             success: false,
+            code: "hotel_not_found",
             message: tzResult.message ?? "Hotel not found",
         });
     }
@@ -344,6 +346,7 @@ export const getMenuForUser = asyncHandler(async (req: Request, res: Response) =
     if (!menuResult.success) {
         return res.status(500).json({
             success: false,
+            code: "failed_to_load_menu",
             message: menuResult.message ?? "Failed to load menu",
         });
     }

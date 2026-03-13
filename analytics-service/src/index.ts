@@ -3,6 +3,7 @@ import dotenv from "dotenv";
 import { connectDB } from "./infra/db/db.js";
 import { connectRabbitMQ } from "./infra/rabbitmq/rabbtmq.js";
 import { startOrderConsumer } from "./modules/analytics/order.consumer.js";
+import { startCheckoutConsumer } from "./modules/analytics/checkout.consumer.js";
 
 dotenv.config();
 
@@ -22,6 +23,7 @@ const start = async (): Promise<void> => {
     await connectDB(MONGO_URL as string);
     await connectRabbitMQ(RABBITMQ_URL as string);
     await startOrderConsumer();
+    await startCheckoutConsumer();
 
     app.listen(PORT, () => {
         console.log(`[Analytics Service] Running on port ${PORT}`);

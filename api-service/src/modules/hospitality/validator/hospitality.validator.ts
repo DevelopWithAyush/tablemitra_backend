@@ -71,6 +71,13 @@ export const OnboardHotelSchema = z.object({
             website: z.string().url("Invalid website URL").optional(),
         }),
 
+        // Business details (required for legal compliance – GST, PAN, FSSAI on bills)
+        businessDetails: z.object({
+            gstin: z.string().min(15, "GSTIN must be 15 characters").max(15),
+            pan: z.string().min(10, "PAN must be 10 characters").max(10),
+            fssaiNumber: z.string().min(14, "FSSAI number must be 14 digits").max(14),
+        }),
+
         // Manager details (required - first manager)
         managerPhone: PhoneSchema,
         managerName: z.string().min(2, "Manager name must be at least 2 characters").max(100),
@@ -122,6 +129,13 @@ export const FounderOnboardHotelSchema = z.object({
             phone: PhoneSchema,
             email: z.string().email("Invalid email"),
             website: z.string().url("Invalid website URL").optional(),
+        }),
+
+        // Business details (required for legal compliance – GST, PAN, FSSAI on bills)
+        businessDetails: z.object({
+            gstin: z.string().min(15, "GSTIN must be 15 characters").max(15),
+            pan: z.string().min(10, "PAN must be 10 characters").max(10),
+            fssaiNumber: z.string().min(14, "FSSAI number must be 14 digits").max(14),
         }),
 
         // Manager details (required - first manager)

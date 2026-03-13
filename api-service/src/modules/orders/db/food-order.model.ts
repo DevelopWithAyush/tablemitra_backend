@@ -124,6 +124,7 @@ FoodOrderSchema.index({ hotelId: 1 });
 FoodOrderSchema.index({ placedById: 1 });
 FoodOrderSchema.index({ customerId: 1 });
 FoodOrderSchema.index({ roomSessionId: 1 });
+FoodOrderSchema.index({ roomSessionId: 1, channelType: 1, status: 1, paymentStatus: 1 }); // For billable stats aggregation
 FoodOrderSchema.index({ status: 1 });
 FoodOrderSchema.index({ createdAt: -1 });
 FoodOrderSchema.index({ hotelId: 1, status: 1 });

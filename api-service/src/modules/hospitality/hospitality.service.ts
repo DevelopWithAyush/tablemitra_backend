@@ -352,6 +352,11 @@ class HospitalityService {
                 email: string;
                 website?: string;
             };
+            businessDetails: {
+                gstin: string;
+                pan: string;
+                fssaiNumber: string;
+            };
             managerPhone: string;
             managerName: string;
             managerEmail?: string;
@@ -383,6 +388,7 @@ class HospitalityService {
                     country: data.address.country || "India",
                 },
                 contact: data.contact,
+                businessDetails: data.businessDetails,
                 totalRooms: data.totalRooms || 0,
                 settings: data.settings,
                 panelSettings: data.panelSettings,
@@ -732,28 +738,35 @@ class HospitalityService {
     };
 
     /**
-     * Returns occupied rooms with their session stats (for QR room list).
-     * Used by qr-code module when type=ROOM to attach stats to OCCUPIED rooms.
+     * Returns occupied rooms with their session stats and roomSessionId (for QR room list).
+     * Used by qr-code module when type=ROOM to attach stats and roomSessionId to OCCUPIED rooms.
      */
-    getOccupiedRoomsWithStats = async (
+    /**
+     * Returns active room sessions for a hotel (roomNumber, roomSessionId).
+     * Used by qr-code module to resolve occupied rooms. Stats derived from orders (DDD).
+     */
+    getActiveRoomSessionsForHotel = async (
         hotelId: string
-    ): Promise<Array<{ roomNumber: string; stats: { totalOrders: number; totalFoodOrders: number; totalServiceRequests: number; totalSpend: number } }>> => {
+    ): Promise<Array<{ roomNumber: string; roomSessionId: string }>> => {
         const sessions = await RoomSession.find({
             hotelId: new Types.ObjectId(hotelId),
             status: "ACTIVE",
         })
-            .select("roomNumber stats")
+            .select("roomNumber")
             .lean();
 
         return sessions.map((s) => ({
-            roomNumber: s.roomNumber,
-            stats: {
-                totalOrders: s.stats?.totalOrders ?? 0,
-                totalFoodOrders: s.stats?.totalFoodOrders ?? 0,
-                totalServiceRequests: s.stats?.totalServiceRequests ?? 0,
-                totalSpend: s.stats?.totalSpend ?? 0,
-            },
+            roomNumber: s.roomNumber as string,
+            roomSessionId: (s._id as { toString(): string }).toString(),
         }));
+    };
+
+    /**
+     * Invalidate QR cache for a hotel. Call when room-relevant data changes (check-in, check-out,
+     * order created/updated for a room). DDD: orders module calls this when room orders change.
+     */
+    invalidateHotelQrCache = async (hotelId: string): Promise<void> => {
+        await qrCodeService.invalidateHotelQrCache(hotelId);
     };
 
     /**
@@ -1212,6 +1225,95 @@ class HospitalityService {
                 roomNumber: session.roomNumber,
                 hotelId,
                 customerId: firstGuestUserId,
+            },
+        };
+    };
+
+    /**
+     * Get room session by ID. Used by checkout module for room details and guest metadata.
+     */
+    getRoomSessionById = async (
+        roomSessionId: string
+    ): Promise<
+        ServiceResult<{
+            _id: string;
+            hotelId: string;
+            roomNumber: string;
+            status: string;
+            checkInAt: Date;
+            metadata: { guests?: Array<{ name?: string; phone?: string; userId?: unknown }>; guestCount?: number };
+        }>
+    > => {
+        const session = await RoomSession.findById(roomSessionId)
+            .select("hotelId roomNumber status checkInAt metadata")
+            .lean();
+
+        if (!session) {
+            return { success: false, message: "Room session not found" };
+        }
+
+        return {
+            success: true,
+            data: {
+                _id: session._id.toString(),
+                hotelId: (session.hotelId as { toString(): string }).toString(),
+                roomNumber: session.roomNumber as string,
+                status: session.status as string,
+                checkInAt: session.checkInAt as Date,
+                metadata: (session.metadata as { guests?: Array<{ name?: string; phone?: string; userId?: unknown }>; guestCount?: number }) ?? {},
+            },
+        };
+    };
+
+    /**
+     * Check out guest – transition room session to CHECKED_OUT. Invalidates QR cache.
+     * Called by checkout module after successful payment.
+     */
+    checkOutGuest = async (
+        roomSessionId: string,
+        checkedOutByUserId: string,
+        auditContext?: HospitalityAuditContext
+    ): Promise<ServiceResult<{ roomNumber: string; hotelId: string }>> => {
+        const session = await RoomSession.findById(roomSessionId).lean();
+        if (!session) {
+            return { success: false, message: "Room session not found" };
+        }
+        if (session.status === "CHECKED_OUT") {
+            return { success: false, message: "Room already checked out" };
+        }
+
+        const now = new Date();
+        await RoomSession.updateOne(
+            { _id: new Types.ObjectId(roomSessionId) },
+            {
+                $set: {
+                    status: "CHECKED_OUT",
+                    checkOutAt: now,
+                    checkedOutBy: new Types.ObjectId(checkedOutByUserId),
+                },
+            }
+        );
+
+        await qrCodeService.invalidateHotelQrCache(session.hotelId.toString());
+
+        if (auditContext) {
+            publishAuditEvent(
+                "GUEST_CHECKED_OUT",
+                "GUEST_SESSION",
+                roomSessionId,
+                auditContext.actor,
+                {
+                    context: { ...auditContext.context, hotelId: session.hotelId.toString() },
+                    newData: { roomSessionId, roomNumber: session.roomNumber },
+                }
+            ).catch((err) => logger.error("Audit publish failed:", err));
+        }
+
+        return {
+            success: true,
+            data: {
+                roomNumber: session.roomNumber as string,
+                hotelId: (session.hotelId as { toString(): string }).toString(),
             },
         };
     };

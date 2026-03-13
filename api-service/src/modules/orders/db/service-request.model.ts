@@ -71,6 +71,7 @@ const ServiceRequestSchema = new Schema(
 ServiceRequestSchema.index({ hotelId: 1 });
 ServiceRequestSchema.index({ userId: 1 });
 ServiceRequestSchema.index({ roomSessionId: 1 });
+ServiceRequestSchema.index({ roomSessionId: 1, status: 1, paymentStatus: 1 }); // For billable stats aggregation
 ServiceRequestSchema.index({ hotelId: 1, status: 1 });
 ServiceRequestSchema.index({ hotelId: 1, createdAt: -1 });
 ServiceRequestSchema.index({ userId: 1, createdAt: -1 });

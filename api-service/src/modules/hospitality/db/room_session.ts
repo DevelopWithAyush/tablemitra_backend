@@ -33,12 +33,6 @@ const roomSessionSchema = new mongoose.Schema({
         ref: "User",
         default: null,
     },
-    stats: {
-        totalOrders: { type: Number, default: 0 },
-        totalFoodOrders: { type: Number, default: 0 },
-        totalServiceRequests: { type: Number, default: 0 },
-        totalSpend: { type: Number, default: 0 },
-    },
     metadata: {
         guests: [{
             name: { type: String },

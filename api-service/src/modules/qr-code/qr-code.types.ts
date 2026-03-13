@@ -118,6 +118,8 @@ export interface IRoomSessionStats {
 export interface IQrCodeInfoWithRoomStatus extends IQrCodeInfo {
     roomStatus?: "OCCUPIED" | "VACANT";
     /** Present when roomStatus is OCCUPIED. */
+    roomSessionId?: string;
+    /** Present when roomStatus is OCCUPIED. */
     stats?: IRoomSessionStats;
 }
 
