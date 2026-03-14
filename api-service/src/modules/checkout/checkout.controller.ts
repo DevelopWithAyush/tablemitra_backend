@@ -1,5 +1,6 @@
 import type { Request, Response } from "express";
 import { asyncHandler } from "../../utils/async-handler.js";
+import { sendServiceError } from "../../utils/error-response.js";
 import { checkoutService } from "./checkout.service.js";
 import { generateCheckoutBillPdf } from "./checkout-pdf.service.js";
 import type { IJwtPayload } from "../auth/auth.types.js";
@@ -10,7 +11,7 @@ export class CheckoutController {
         const result = await checkoutService.getCheckoutPreview(roomSessionId);
 
         if (!result.success) {
-            return res.status(400).json({ success: false, message: result.message });
+            return sendServiceError(res, 400, result.message ?? "Bad request", { instance: req.originalUrl });
         }
 
         return res.status(200).json({ success: true, data: result.data });
@@ -26,7 +27,7 @@ export class CheckoutController {
         );
 
         if (!result.success) {
-            return res.status(400).json({ success: false, message: result.message });
+            return sendServiceError(res, 400, result.message ?? "Bad request", { instance: req.originalUrl });
         }
 
         return res.status(200).json({
@@ -41,7 +42,7 @@ export class CheckoutController {
         const result = await generateCheckoutBillPdf(checkoutSessionId);
 
         if (!result.success) {
-            return res.status(404).json({ success: false, message: result.message });
+            return sendServiceError(res, 404, result.message ?? "Not found", { instance: req.originalUrl });
         }
 
         const filename = `checkout-bill-${checkoutSessionId}.pdf`;

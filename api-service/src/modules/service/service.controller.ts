@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import { asyncHandler } from "../../utils/async-handler.js";
+import { sendServiceError } from "../../utils/error-response.js";
 import serviceOptimizationService from "./service.service.js";
 import hospitalityService from "../hospitality/hospitality.service.js";
 import {
@@ -77,10 +78,7 @@ export const createCategory = asyncHandler(async (req: Request, res: Response) =
     const result = await serviceOptimizationService.createCategory(hotelId, dto, getAuditContext(req));
 
     if (!result.success) {
-        return res.status(400).json({
-            success: false,
-            message: result.message,
-        });
+        return sendServiceError(res, 400, result.message ?? "Bad request", { instance: req.originalUrl });
     }
 
     return res.status(201).json({
@@ -102,10 +100,7 @@ export const updateCategory = asyncHandler(async (req: Request, res: Response) =
     const result = await serviceOptimizationService.updateCategory(hotelId, categoryId, dto, getAuditContext(req));
 
     if (!result.success) {
-        return res.status(400).json({
-            success: false,
-            message: result.message,
-        });
+        return sendServiceError(res, 400, result.message ?? "Bad request", { instance: req.originalUrl });
     }
 
     return res.json({
@@ -153,10 +148,7 @@ export const getServices = asyncHandler(async (req: Request, res: Response) => {
     const result = await serviceOptimizationService.getServices(hotelId, categoryId, query);
 
     if (!result.success) {
-        return res.status(404).json({
-            success: false,
-            message: result.message,
-        });
+        return sendServiceError(res, 404, result.message ?? "Not found", { instance: req.originalUrl });
     }
 
     return res.json({
@@ -177,10 +169,7 @@ export const createService = asyncHandler(async (req: Request, res: Response) =>
     const result = await serviceOptimizationService.createService(hotelId, categoryId, dto, getAuditContext(req));
 
     if (!result.success) {
-        return res.status(400).json({
-            success: false,
-            message: result.message,
-        });
+        return sendServiceError(res, 400, result.message ?? "Bad request", { instance: req.originalUrl });
     }
 
     return res.status(201).json({
@@ -202,10 +191,7 @@ export const updateService = asyncHandler(async (req: Request, res: Response) =>
     const result = await serviceOptimizationService.updateService(hotelId, serviceId, dto, getAuditContext(req));
 
     if (!result.success) {
-        return res.status(400).json({
-            success: false,
-            message: result.message,
-        });
+        return sendServiceError(res, 400, result.message ?? "Bad request", { instance: req.originalUrl });
     }
 
     return res.json({
@@ -226,10 +212,7 @@ export const toggleService = asyncHandler(async (req: Request, res: Response) =>
     const result = await serviceOptimizationService.toggleService(hotelId, serviceId, getAuditContext(req));
 
     if (!result.success) {
-        return res.status(404).json({
-            success: false,
-            message: result.message,
-        });
+        return sendServiceError(res, 404, result.message ?? "Not found", { instance: req.originalUrl });
     }
 
     return res.json({
@@ -252,10 +235,7 @@ export const getFullCatalog = asyncHandler(async (req: Request, res: Response) =
     const result = await serviceOptimizationService.getFullCatalog(hotelId, includeInactive);
 
     if (!result.success) {
-        return res.status(500).json({
-            success: false,
-            message: result.message,
-        });
+        return sendServiceError(res, 500, result.message ?? "Internal server error", { instance: req.originalUrl });
     }
 
     return res.json({
@@ -276,26 +256,17 @@ export const getServiceCatalogForUser = asyncHandler(async (req: Request, res: R
         (req.query.hotelId as string | undefined) ||
         (req.cookies?.customer_room_hotel_id as string | undefined);
     if (!hotelId) {
-        return res.status(400).json({
-            success: false,
-            message: "Hotel context required: provide hotelId query or customer_room_hotel_id cookie",
-        });
+        return sendServiceError(res, 400, "Hotel context required: provide hotelId query or customer_room_hotel_id cookie", { instance: req.originalUrl });
     }
 
     const tzResult = await hospitalityService.getHotelTimezone(hotelId);
     if (!tzResult.success) {
-        return res.status(404).json({
-            success: false,
-            message: tzResult.message ?? "Hotel not found",
-        });
+        return sendServiceError(res, 404, tzResult.message ?? "Hotel not found", { instance: req.originalUrl });
     }
 
     const result = await serviceOptimizationService.getServiceCatalogForUser(hotelId, tzResult.data!);
     if (!result.success) {
-        return res.status(500).json({
-            success: false,
-            message: result.message ?? "Failed to load catalog",
-        });
+        return sendServiceError(res, 500, result.message ?? "Failed to load catalog", { instance: req.originalUrl });
     }
 
     return res.json({

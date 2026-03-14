@@ -1,4 +1,5 @@
 import { Request, Response } from "express";
+import { sendServiceError } from "../../utils/error-response.js";
 import { asyncHandler } from "../../utils/async-handler.js";
 import { verifyAccessToken } from "../../utils/jwt.js";
 import { IJwtPayload } from "../auth/auth.types.js";
@@ -20,7 +21,7 @@ export const handleCustomerScan = asyncHandler(async (req: Request, res: Respons
     const code = req.params.code as string;
 
     if (app !== "customer") {
-        return res.status(404).json({ success: false, message: "Not found" });
+        return sendServiceError(res, 404, "Not found", { instance: req.originalUrl });
     }
 
     const qrResult = await qrCodeService.getQrCodeByCode(code);
@@ -47,7 +48,7 @@ export const handleCustomerScan = asyncHandler(async (req: Request, res: Respons
     const appUrl = process.env.CUSTOMER_APP_URL 
     logger.info(`appUrl: ${appUrl}`);
     if (!loginUrl || !appUrl) {
-        return res.status(500).json({ success: false, message: "CUSTOMER_LOGIN_URL or CUSTOMER_APP_URL is not set" });
+        return sendServiceError(res, 500, "CUSTOMER_LOGIN_URL or CUSTOMER_APP_URL is not set", { instance: req.originalUrl });
     }
 
     let userId: string | null = null;

@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import { asyncHandler } from "../../utils/async-handler.js";
+import { sendServiceError } from "../../utils/error-response.js";
 import companyService from "./company.service.js";
 import type { CompanyAuditContext } from "./company.types.js";
 import type { IJwtPayload } from "../auth/auth.types.js";
@@ -41,10 +42,7 @@ export const getAdminById = asyncHandler(async (req: Request, res: Response) => 
     const result = await companyService.getAdminById(id);
 
     if (!result.success) {
-        return res.status(404).json({
-            success: false,
-            message: result.message,
-        });
+        return sendServiceError(res, 404, result.message ?? "Not found", { instance: req.originalUrl });
     }
 
     return res.json({
@@ -58,10 +56,7 @@ export const createAdmin = asyncHandler(async (req: Request, res: Response) => {
     const result = await companyService.createAdmin(dto, getAuditContext(req));
 
     if (!result.success) {
-        return res.status(400).json({
-            success: false,
-            message: result.message,
-        });
+        return sendServiceError(res, 400, result.message ?? "Bad request", { instance: req.originalUrl });
     }
 
     return res.status(201).json({
@@ -77,10 +72,7 @@ export const updateAdmin = asyncHandler(async (req: Request, res: Response) => {
     const result = await companyService.updateAdmin(id, dto, getAuditContext(req));
 
     if (!result.success) {
-        return res.status(400).json({
-            success: false,
-            message: result.message,
-        });
+        return sendServiceError(res, 400, result.message ?? "Bad request", { instance: req.originalUrl });
     }
 
     return res.json({
@@ -95,10 +87,7 @@ export const deleteAdmin = asyncHandler(async (req: Request, res: Response) => {
     const result = await companyService.deleteAdmin(id, getAuditContext(req));
 
     if (!result.success) {
-        return res.status(400).json({
-            success: false,
-            message: result.message,
-        });
+        return sendServiceError(res, 400, result.message ?? "Bad request", { instance: req.originalUrl });
     }
 
     return res.json({
@@ -124,10 +113,7 @@ export const getCustomerCareById = asyncHandler(async (req: Request, res: Respon
     const result = await companyService.getCustomerCareById(id);
 
     if (!result.success) {
-        return res.status(404).json({
-            success: false,
-            message: result.message,
-        });
+        return sendServiceError(res, 404, result.message ?? "Not found", { instance: req.originalUrl });
     }
 
     return res.json({
@@ -141,10 +127,7 @@ export const createCustomerCare = asyncHandler(async (req: Request, res: Respons
     const result = await companyService.createCustomerCare(dto, getAuditContext(req));
 
     if (!result.success) {
-        return res.status(400).json({
-            success: false,
-            message: result.message,
-        });
+        return sendServiceError(res, 400, result.message ?? "Bad request", { instance: req.originalUrl });
     }
 
     return res.status(201).json({
@@ -160,10 +143,7 @@ export const updateCustomerCare = asyncHandler(async (req: Request, res: Respons
     const result = await companyService.updateCustomerCare(id, dto, getAuditContext(req));
 
     if (!result.success) {
-        return res.status(400).json({
-            success: false,
-            message: result.message,
-        });
+        return sendServiceError(res, 400, result.message ?? "Bad request", { instance: req.originalUrl });
     }
 
     return res.json({
@@ -178,10 +158,7 @@ export const deleteCustomerCare = asyncHandler(async (req: Request, res: Respons
     const result = await companyService.deleteCustomerCare(id, getAuditContext(req));
 
     if (!result.success) {
-        return res.status(400).json({
-            success: false,
-            message: result.message,
-        });
+        return sendServiceError(res, 400, result.message ?? "Bad request", { instance: req.originalUrl });
     }
 
     return res.json({
@@ -207,10 +184,7 @@ export const getSalesById = asyncHandler(async (req: Request, res: Response) => 
     const result = await companyService.getSalesById(id);
 
     if (!result.success) {
-        return res.status(404).json({
-            success: false,
-            message: result.message,
-        });
+        return sendServiceError(res, 404, result.message ?? "Not found", { instance: req.originalUrl });
     }
 
     return res.json({
@@ -224,10 +198,7 @@ export const createSales = asyncHandler(async (req: Request, res: Response) => {
     const result = await companyService.createSales(dto, getAuditContext(req));
 
     if (!result.success) {
-        return res.status(400).json({
-            success: false,
-            message: result.message,
-        });
+        return sendServiceError(res, 400, result.message ?? "Bad request", { instance: req.originalUrl });
     }
 
     return res.status(201).json({
@@ -243,10 +214,7 @@ export const updateSales = asyncHandler(async (req: Request, res: Response) => {
     const result = await companyService.updateSales(id, dto, getAuditContext(req));
 
     if (!result.success) {
-        return res.status(400).json({
-            success: false,
-            message: result.message,
-        });
+        return sendServiceError(res, 400, result.message ?? "Bad request", { instance: req.originalUrl });
     }
 
     return res.json({
@@ -261,10 +229,7 @@ export const deleteSales = asyncHandler(async (req: Request, res: Response) => {
     const result = await companyService.deleteSales(id, getAuditContext(req));
 
     if (!result.success) {
-        return res.status(400).json({
-            success: false,
-            message: result.message,
-        });
+        return sendServiceError(res, 400, result.message ?? "Bad request", { instance: req.originalUrl });
     }
 
     return res.json({

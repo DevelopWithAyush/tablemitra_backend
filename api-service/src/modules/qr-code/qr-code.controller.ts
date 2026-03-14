@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import { asyncHandler } from "../../utils/async-handler.js";
+import { sendServiceError } from "../../utils/error-response.js";
 import hospitalityService from "../hospitality/hospitality.service.js";
 import { qrCodeService } from "./qr-code.service.js";
 import { DeleteQrCodeParams, DeleteQrCodeBody } from "./qr-code.types.js";
@@ -54,10 +55,7 @@ class QrCodeController {
         const result = await qrCodeService.getQrSetByHotelId(hotelId);
 
         if (!result.success) {
-            return res.status(400).json({
-                success: false,
-                message: result.message,
-            });
+            return sendServiceError(res, 400, result.message ?? "Bad request", { instance: req.originalUrl });
         }
 
         return res.status(200).json({
@@ -79,10 +77,7 @@ class QrCodeController {
         const result = await qrCodeService.generateQrCodes(hotelId, input, getAuditContext(req));
 
         if (!result.success) {
-            return res.status(400).json({
-                success: false,
-                message: result.message,
-            });
+            return sendServiceError(res, 400, result.message ?? "Bad request", { instance: req.originalUrl });
         }
 
         return res.status(201).json({
@@ -103,10 +98,7 @@ class QrCodeController {
         const result = await qrCodeService.getQrCodes(hotelId, type, status);
 
         if (!result.success) {
-            return res.status(400).json({
-                success: false,
-                message: result.message,
-            });
+            return sendServiceError(res, 400, result.message ?? "Bad request", { instance: req.originalUrl });
         }
 
         return res.status(200).json({
@@ -127,10 +119,7 @@ class QrCodeController {
         const result = await qrCodeService.addSingleQrCode(hotelId, input, getAuditContext(req));
 
         if (!result.success) {
-            return res.status(400).json({
-                success: false,
-                message: result.message,
-            });
+            return sendServiceError(res, 400, result.message ?? "Bad request", { instance: req.originalUrl });
         }
 
         return res.status(201).json({
@@ -151,10 +140,7 @@ class QrCodeController {
         const result = await qrCodeService.toggleQrStatus(codeId, { isActive, reason }, getAuditContext(req));
 
         if (!result.success) {
-            return res.status(400).json({
-                success: false,
-                message: result.message,
-            });
+            return sendServiceError(res, 400, result.message ?? "Bad request", { instance: req.originalUrl });
         }
 
         return res.status(200).json({
@@ -174,10 +160,7 @@ class QrCodeController {
         const result = await qrCodeService.deleteQrCode(codeId, reason, getAuditContext(req));
 
         if (!result.success) {
-            return res.status(400).json({
-                success: false,
-                message: result.message,
-            });
+            return sendServiceError(res, 400, result.message ?? "Bad request", { instance: req.originalUrl });
         }
 
         return res.status(200).json({
@@ -197,10 +180,7 @@ class QrCodeController {
         const result = await qrCodeService.getDistinctLocations(hotelId, type);
 
         if (!result.success) {
-            return res.status(400).json({
-                success: false,
-                message: result.message,
-            });
+            return sendServiceError(res, 400, result.message ?? "Bad request", { instance: req.originalUrl });
         }
 
         return res.status(200).json({
@@ -221,10 +201,7 @@ class QrCodeController {
 
         const hotelResult = await hospitalityService.getHotelById(hotelId);
         if (!hotelResult.success || !hotelResult.data) {
-            return res.status(404).json({
-                success: false,
-                message: hotelResult.message ?? "Hotel not found",
-            });
+            return sendServiceError(res, 404, hotelResult.message ?? "Hotel not found", { instance: req.originalUrl });
         }
 
         const hotelData = hotelResult.data as { name?: string; logo?: { url?: string } | string };
@@ -236,18 +213,12 @@ class QrCodeController {
 
         const codesResult = await qrCodeService.getQrCodesForDownload(hotelId, query);
         if (!codesResult.success || !codesResult.data) {
-            return res.status(404).json({
-                success: false,
-                message: codesResult.message,
-            });
+            return sendServiceError(res, 404, codesResult.message ?? "Not found", { instance: req.originalUrl });
         }
 
         const pdfResult = await qrCodeService.generateQrPdf(codesResult.data, { hotelLogoUrl });
         if (!pdfResult.success || !pdfResult.data) {
-            return res.status(500).json({
-                success: false,
-                message: pdfResult.message ?? "Failed to generate PDF",
-            });
+            return sendServiceError(res, 500, pdfResult.message ?? "Failed to generate PDF", { instance: req.originalUrl });
         }
 
         const sanitize = (s: string) => s.replace(/[^a-zA-Z0-9-_]/g, "-").replace(/-+/g, "-").trim() || "";
@@ -276,17 +247,11 @@ class QrCodeController {
         const result = await qrCodeService.getQrCodeByCode(code);
 
         if (!result.success) {
-            return res.status(400).json({
-                success: false,
-                message: result.message,
-            });
+            return sendServiceError(res, 400, result.message ?? "Bad request", { instance: req.originalUrl });
         }
 
         if (!result.data) {
-            return res.status(404).json({
-                success: false,
-                message: "QR Code not found or inactive",
-            });
+            return sendServiceError(res, 404, "QR Code not found or inactive", { instance: req.originalUrl });
         }
 
         return res.status(200).json({

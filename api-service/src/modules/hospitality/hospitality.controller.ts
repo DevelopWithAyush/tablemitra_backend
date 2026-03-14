@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import { asyncHandler } from "../../utils/async-handler.js";
+import { sendServiceError } from "../../utils/error-response.js";
 import { IJwtPayload } from "../auth/auth.types.js";
 import hospitalityService from "./hospitality.service.js";
 import logger from "../../helpers/logger/index.js";
@@ -57,10 +58,7 @@ class HospitalityController {
         );
 
         if (!result.success) {
-            return res.status(400).json({
-                success: false,
-                message: result.message,
-            });
+            return sendServiceError(res, 400, result.message ?? "Bad request", { instance: req.originalUrl });
         }
 
         return res.status(201).json({
@@ -100,10 +98,7 @@ class HospitalityController {
         const result = await hospitalityService.getChainById(chainId);
 
         if (!result.success) {
-            return res.status(404).json({
-                success: false,
-                message: result.message,
-            });
+            return sendServiceError(res, 404, result.message ?? "Not found", { instance: req.originalUrl });
         }
 
         return res.status(200).json({
@@ -146,10 +141,7 @@ class HospitalityController {
         );
 
         if (!result.success) {
-            return res.status(400).json({
-                success: false,
-                message: result.message,
-            });
+            return sendServiceError(res, 400, result.message ?? "Bad request", { instance: req.originalUrl });
         }
 
         return res.status(201).json({
@@ -191,10 +183,7 @@ class HospitalityController {
         const result = await hospitalityService.getHotelById(hotelId);
 
         if (!result.success) {
-            return res.status(404).json({
-                success: false,
-                message: result.message,
-            });
+            return sendServiceError(res, 404, result.message ?? "Not found", { instance: req.originalUrl });
         }
 
         return res.status(200).json({
@@ -220,10 +209,7 @@ class HospitalityController {
         );
 
         if (!result.success) {
-            return res.status(400).json({
-                success: false,
-                message: result.message,
-            });
+            return sendServiceError(res, 400, result.message ?? "Bad request", { instance: req.originalUrl });
         }
 
         return res.status(201).json({
@@ -245,10 +231,7 @@ class HospitalityController {
         // Verify founder has access to this chain
         const hasAccess = await hospitalityService.founderHasChainAccess(user.sub, chainId);
         if (!hasAccess) {
-            return res.status(403).json({
-                success: false,
-                message: "You do not have access to this chain",
-            });
+            return sendServiceError(res, 403, "You do not have access to this chain", { instance: req.originalUrl });
         }
 
         const result = await hospitalityService.addChainMember(
@@ -259,10 +242,7 @@ class HospitalityController {
         );
 
         if (!result.success) {
-            return res.status(400).json({
-                success: false,
-                message: result.message,
-            });
+            return sendServiceError(res, 400, result.message ?? "Bad request", { instance: req.originalUrl });
         }
 
         return res.status(201).json({
@@ -283,10 +263,7 @@ class HospitalityController {
         // Verify founder has access
         const hasAccess = await hospitalityService.founderHasChainAccess(user.sub, chainId);
         if (!hasAccess) {
-            return res.status(403).json({
-                success: false,
-                message: "You do not have access to this chain",
-            });
+            return sendServiceError(res, 403, "You do not have access to this chain", { instance: req.originalUrl });
         }
 
         const result = await hospitalityService.getChainMembers(chainId);
@@ -314,10 +291,7 @@ class HospitalityController {
         // Verify founder has access to the chain
         const hasAccess = await hospitalityService.founderHasChainAccess(user.sub, chainId);
         if (!hasAccess) {
-            return res.status(403).json({
-                success: false,
-                message: "You do not have access to this chain",
-            });
+            return sendServiceError(res, 403, "You do not have access to this chain", { instance: req.originalUrl });
         }
 
         const result = await hospitalityService.onboardHotelWithManager(
@@ -340,10 +314,7 @@ class HospitalityController {
         );
 
         if (!result.success) {
-            return res.status(400).json({
-                success: false,
-                message: result.message,
-            });
+            return sendServiceError(res, 400, result.message ?? "Bad request", { instance: req.originalUrl });
         }
 
         return res.status(201).json({
@@ -364,10 +335,7 @@ class HospitalityController {
         // Get chain from JWT context
         const chainId = user.ctx?.id;
         if (!chainId) {
-            return res.status(400).json({
-                success: false,
-                message: "No chain context found. Please switch to a chain first.",
-            });
+            return sendServiceError(res, 400, "No chain context found. Please switch to a chain first.", { instance: req.originalUrl });
         }
 
         const result = await hospitalityService.getHotelsByChainId(chainId, {
@@ -401,10 +369,7 @@ class HospitalityController {
         );
 
         if (!result.success) {
-            return res.status(400).json({
-                success: false,
-                message: result.message,
-            });
+            return sendServiceError(res, 400, result.message ?? "Bad request", { instance: req.originalUrl });
         }
 
         return res.status(201).json({
@@ -454,10 +419,7 @@ class HospitalityController {
         );
 
         if (!result.success) {
-            return res.status(400).json({
-                success: false,
-                message: result.message,
-            });
+            return sendServiceError(res, 400, result.message ?? "Bad request", { instance: req.originalUrl });
         }
 
         return res.status(201).json({
@@ -475,7 +437,7 @@ class HospitalityController {
     getCustomerHomeContext = asyncHandler(async (req: Request, res: Response) => {
         const app = req.params.app as string;
         if (app !== "customer") {
-            return res.status(404).json({ success: false, message: "Not found" });
+            return sendServiceError(res, 404, "Not found", { instance: req.originalUrl });
         }
 
         const hotelId = req.cookies?.customer_room_hotel_id as string | undefined;
@@ -493,10 +455,7 @@ class HospitalityController {
 
         const result = await hospitalityService.getHotelContextForCustomer(hotelId);
         if (!result.success || !result.data) {
-            return res.status(404).json({
-                success: false,
-                message: result.message ?? "Hotel not found",
-            });
+            return sendServiceError(res, 404, result.message ?? "Hotel not found", { instance: req.originalUrl });
         }
 
         const response: CustomerHomeResponse = {

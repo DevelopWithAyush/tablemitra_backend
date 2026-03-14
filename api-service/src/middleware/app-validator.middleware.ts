@@ -1,5 +1,6 @@
 import { NextFunction, Request, Response } from "express";
 import { z } from "zod";
+import { sendErrorResponse } from "../utils/error-response.js";
 
 const AppSchema = z.enum([
     "admin",
@@ -17,8 +18,8 @@ export function appValidator(req: Request, res: Response, next: NextFunction) {
     const result = AppSchema.safeParse(req.params.app);
 
     if (!result.success) {
-        return res.status(404).json({
-            error: "Invalid app"
+        return sendErrorResponse(res, 404, "NOT_FOUND", {
+            detail: "Invalid app",
         });
     }
 

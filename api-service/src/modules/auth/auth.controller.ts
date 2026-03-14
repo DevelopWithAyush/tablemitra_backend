@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import { asyncHandler } from "../../utils/async-handler.js";
+import { sendServiceError } from "../../utils/error-response.js";
 import { IJwtPayload, SendOtpDTO, VerifyOtpDTO } from "./auth.types.js";
 import authService from "./auth.service.js";
 import logger from "../../helpers/logger/index.js";
@@ -27,10 +28,7 @@ class AuthController {
             });
         }
 
-        return res.status(400).json({
-            success: false,
-            message: result.message,
-        });
+        return sendServiceError(res, 400, result.message ?? "Bad request", { instance: req.originalUrl });
     });
 
     verifyOtp = asyncHandler(async (req: Request, res: Response) => {
@@ -42,10 +40,7 @@ class AuthController {
         const result = await authService.verifyOtp(dto);
 
         if (!result.success) {
-            return res.status(400).json({
-                success: false,
-                message: result.message,
-            });
+            return sendServiceError(res, 400, result.message ?? "Verification failed", { instance: req.originalUrl });
         }
 
         const { accessToken, refreshToken } = result; 
@@ -86,10 +81,7 @@ class AuthController {
 
         logger.info(`refreshTokenValue: ${refreshTokenValue}`);
         if (!refreshTokenValue) {
-            return res.status(401).json({
-                success: false,
-                message: "Refresh token not found",
-            });
+            return sendServiceError(res, 401, "Refresh token not found", { instance: req.originalUrl });
         }
 
         const result = await authService.refreshToken(refreshTokenValue as string, app as string);
@@ -98,10 +90,7 @@ class AuthController {
             res.clearCookie("accessToken", buildCookieOptions(app as string, 0));
             res.clearCookie("refreshToken", buildCookieOptions(app as string, 0));
 
-            return res.status(401).json({
-                success: false,
-                message: result.message,
-            });
+            return sendServiceError(res, 401, result.message ?? "Token refresh failed", { instance: req.originalUrl });
         }
 
         // Rotate cookies — both access token and the new refresh token from rotation
@@ -125,10 +114,7 @@ class AuthController {
 
         if (!result.success) {
             const statusCode = result.unauthorized ? 401 : 404;
-            return res.status(statusCode).json({
-                success: false,
-                message: result.message,
-            });
+            return sendServiceError(res, statusCode, result.message ?? "Profile not found", { instance: req.originalUrl });
         }
 
         return res.status(200).json({
@@ -148,10 +134,7 @@ class AuthController {
 
         if (!result.success) {
             const statusCode = result.unauthorized ? 401 : 400;
-            return res.status(statusCode).json({
-                success: false,
-                message: result.message,
-            });
+            return sendServiceError(res, statusCode, result.message ?? "Logout failed", { instance: req.originalUrl });
         }
 
         res.clearCookie("accessToken", buildCookieOptions(app as string, 0));
@@ -179,19 +162,13 @@ class AuthController {
         const { app } = req.params;
 
         if (app !== "founder") {
-            return res.status(400).json({
-                success: false,
-                message: "This endpoint is only available for founders",
-            });
+            return sendServiceError(res, 400, "This endpoint is only available for founders", { instance: req.originalUrl });
         }
 
         const result = await authService.getFounderChains(user.sub);
 
         if (!result.success) {
-            return res.status(404).json({
-                success: false,
-                message: result.message,
-            });
+            return sendServiceError(res, 404, result.message ?? "Chains not found", { instance: req.originalUrl });
         }
 
         return res.status(200).json({
@@ -209,10 +186,7 @@ class AuthController {
         const { chainId } = req.body as { chainId: string };
 
         if (!chainId) {
-            return res.status(400).json({
-                success: false,
-                message: "chainId is required",
-            });
+            return sendServiceError(res, 400, "chainId is required", { instance: req.originalUrl });
         }
 
         const result = await authService.switchChainContext(
@@ -223,10 +197,7 @@ class AuthController {
         );
 
         if (!result.success) {
-            return res.status(400).json({
-                success: false,
-                message: result.message,
-            });
+            return sendServiceError(res, 400, result.message ?? "Chain switch failed", { instance: req.originalUrl });
         }
 
         const { accessToken, refreshToken } = result;
@@ -249,10 +220,7 @@ class AuthController {
         const app = req.params.app as string;
 
         if (app !== "customer") {
-            return res.status(400).json({
-                success: false,
-                message: "This endpoint is only available for customers",
-            });
+            return sendServiceError(res, 400, "This endpoint is only available for customers", { instance: req.originalUrl });
         }
 
         const { body: dto } = UpdateCustomerProfileSchema.parse({ body: req.body });
@@ -265,10 +233,7 @@ class AuthController {
         });
 
         if (!result.success) {
-            return res.status(404).json({
-                success: false,
-                message: result.message ?? "Customer profile not found",
-            });
+            return sendServiceError(res, 404, result.message ?? "Customer profile not found", { instance: req.originalUrl });
         }
 
         return res.status(200).json({

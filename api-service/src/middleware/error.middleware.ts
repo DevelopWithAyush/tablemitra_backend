@@ -1,5 +1,7 @@
 import type { Request, Response, NextFunction } from 'express';
 import logger from '../helpers/logger/index.js';
+import { buildProblemResponse } from '../utils/error-response.js';
+import type { ApiErrorType, FieldError } from '../types/error.types.js';
 
 interface MongooseDuplicateError extends Error {
     code: number;
@@ -24,6 +26,11 @@ interface JwtError extends Error {
     expiredAt?: Date;
 }
 
+interface ZodValidationError extends Error {
+    name: 'ZodValidationError';
+    validationErrors?: FieldError[];
+}
+
 interface AppError extends Error {
     statusCode?: number;
     isOperational?: boolean;
@@ -34,49 +41,64 @@ interface AppError extends Error {
     value?: unknown;
     kind?: string;
     errors?: Record<string, { message?: string; path?: string }>;
+    validationErrors?: FieldError[];
     expiredAt?: Date;
-}
-
-interface ErrorResponse {
-    success: false;
-    message: string;
-    errorCode?: string;
-    stack?: string;
-    details?: unknown;
 }
 
 const isDevelopment = process.env.NODE_ENV !== 'production';
 
-const handleMongooseDuplicateError = (err: MongooseDuplicateError): { message: string; statusCode: number } => {
+const handleMongooseDuplicateError = (err: MongooseDuplicateError): { detail: string; statusCode: number } => {
     const fields = err.keyPattern ? Object.keys(err.keyPattern) : [];
     const values = err.keyValue ? Object.values(err.keyValue) : [];
-    const message = `Duplicate value${fields.length > 1 ? 's' : ''} for field${fields.length > 1 ? 's' : ''}: ${fields.join(', ')}. Value${values.length > 1 ? 's' : ''}: ${values.join(', ')}`;
-    return { message, statusCode: 409 };
+    const detail = `Duplicate value${fields.length > 1 ? 's' : ''} for field${fields.length > 1 ? 's' : ''}: ${fields.join(', ')}. Value${values.length > 1 ? 's' : ''}: ${values.join(', ')}`;
+    return { detail, statusCode: 409 };
 };
 
-const handleMongooseCastError = (err: MongooseCastError): { message: string; statusCode: number } => {
-    const message = `Invalid ${err.kind || 'format'} for field: ${err.path || 'unknown'}`;
-    return { message, statusCode: 400 };
+const handleMongooseCastError = (err: MongooseCastError): { detail: string; statusCode: number } => {
+    const detail = `Invalid ${err.kind || 'format'} for field: ${err.path || 'unknown'}`;
+    return { detail, statusCode: 400 };
 };
 
-const handleMongooseValidationError = (err: MongooseValidationError): { message: string; statusCode: number } => {
-    const errors = err.errors ? Object.values(err.errors) : [];
-    const messages = errors
-        .map((error) => error.message || `Invalid value for ${error.path || 'field'}`)
-        .filter(Boolean);
-    const message = messages.length > 0 ? messages.join('. ') : 'Validation failed';
-    return { message, statusCode: 400 };
+const handleMongooseValidationError = (err: MongooseValidationError): { detail: string; statusCode: number; fieldErrors?: FieldError[] } => {
+    const errs = err.errors ? Object.entries(err.errors) : [];
+    const fieldErrors: FieldError[] = errs.map(([path, e]) => ({
+        name: path,
+        message: e?.message || `Invalid value for ${path}`,
+    }));
+    const detail = fieldErrors.length > 0
+        ? fieldErrors.map((e) => `${e.name}: ${e.message}`).join('. ')
+        : 'Validation failed';
+    return { detail, statusCode: 400, fieldErrors };
 };
 
-const handleJwtError = (err: JwtError): { message: string; statusCode: number } => {
+const handleJwtError = (err: JwtError): { detail: string; statusCode: number } => {
     if (err.name === 'TokenExpiredError') {
-        return { message: 'Token has expired', statusCode: 401 };
+        return { detail: 'Token has expired', statusCode: 401 };
     }
     if (err.name === 'NotBeforeError') {
-        return { message: 'Token not active yet', statusCode: 401 };
+        return { detail: 'Token not active yet', statusCode: 401 };
     }
-    return { message: 'Invalid token', statusCode: 401 };
+    return { detail: 'Invalid token', statusCode: 401 };
 };
+
+/** Map legacy error codes to RFC 7807 types */
+function statusToType(status: number, err: AppError): ApiErrorType {
+    if ((err as ZodValidationError).validationErrors) return 'VALIDATION_ERROR';
+    if (err.code === 11000) return 'CONFLICT';
+    if (err.name === 'CastError') return 'BAD_REQUEST';
+    if (err.name === 'ValidationError') return 'VALIDATION_ERROR';
+    if (err.name === 'ZodValidationError') return 'VALIDATION_ERROR';
+    if (err.name === 'JsonWebTokenError' || err.name === 'TokenExpiredError' || err.name === 'NotBeforeError') {
+        return 'UNAUTHORIZED';
+    }
+    switch (status) {
+        case 401: return 'UNAUTHORIZED';
+        case 403: return 'FORBIDDEN';
+        case 404: return 'NOT_FOUND';
+        case 409: return 'CONFLICT';
+        default: return status >= 500 ? 'INTERNAL_ERROR' : 'BAD_REQUEST';
+    }
+}
 
 export const errorMiddleware = (
     err: AppError,
@@ -85,60 +107,62 @@ export const errorMiddleware = (
     next: NextFunction
 ): Response => {
     let statusCode = err.statusCode || 500;
-    let message = err.message || 'Internal Server Error';
-    let errorCode: string | undefined;
+    let detail = err.message || 'Internal Server Error';
+    let fieldErrors: FieldError[] | undefined;
 
     // Handle Mongoose duplicate key error
     if (err.code === 11000) {
         const result = handleMongooseDuplicateError(err as MongooseDuplicateError);
-        message = result.message;
+        detail = result.detail;
         statusCode = result.statusCode;
-        errorCode = 'DUPLICATE_KEY_ERROR';
     }
     // Handle Mongoose cast error
     else if (err.name === 'CastError') {
         const result = handleMongooseCastError(err as MongooseCastError);
-        message = result.message;
+        detail = result.detail;
         statusCode = result.statusCode;
-        errorCode = 'INVALID_ID_FORMAT';
     }
     // Handle Mongoose validation error
     else if (err.name === 'ValidationError') {
         const result = handleMongooseValidationError(err as MongooseValidationError);
-        message = result.message;
+        detail = result.detail;
         statusCode = result.statusCode;
-        errorCode = 'VALIDATION_ERROR';
+        fieldErrors = result.fieldErrors;
     }
-    // Handle Zod validation error
+    // Handle Zod validation error (structured errors from validate middleware)
     else if (err.name === 'ZodValidationError') {
-        errorCode = 'VALIDATION_ERROR';
-        // Message is already formatted by validate middleware
+        fieldErrors = (err as ZodValidationError).validationErrors;
+        if (!fieldErrors?.length) {
+            // Fallback if validate middleware didn't pass structured errors
+            detail = err.message;
+        }
+        statusCode = 400;
     }
     // Handle JWT errors
     else if (err.name === 'JsonWebTokenError' || err.name === 'TokenExpiredError' || err.name === 'NotBeforeError') {
         const result = handleJwtError(err as JwtError);
-        message = result.message;
+        detail = result.detail;
         statusCode = result.statusCode;
-        errorCode = 'JWT_ERROR';
     }
-    // Handle operational errors (known errors)
+    // Handle operational errors (ErrorHandler)
     else if (err.isOperational) {
-        errorCode = 'OPERATIONAL_ERROR';
+        detail = err.message;
+        // statusCode already set from err.statusCode
     }
     // Handle unknown errors
     else {
-        errorCode = 'INTERNAL_SERVER_ERROR';
-        // Don't expose internal error details in production
         if (!isDevelopment) {
-            message = 'Something went wrong. Please try again later.';
+            detail = 'Something went wrong. Please try again later.';
         }
     }
 
-    // Log error with context
+    const type = statusToType(statusCode, err);
+    const instance = req.originalUrl || req.path;
+
     const errorLog = {
         message: err.message,
         statusCode,
-        errorCode,
+        type,
         path: req.path,
         method: req.method,
         ip: req.ip,
@@ -147,24 +171,23 @@ export const errorMiddleware = (
         ...(isDevelopment && { stack: err.stack }),
     };
 
-    // Use console.error for now (can be replaced with proper logger like winston/pino)
     logger.error('Error occurred:', errorLog);
 
-    // Build error response
-    const errorResponse: ErrorResponse = {
-        success: false,
-        message,
-        ...(errorCode && { errorCode }),
-    };
+    const problem = buildProblemResponse(statusCode, type, {
+        detail,
+        instance,
+        errors: fieldErrors,
+        ...(isDevelopment && {
+            stack: err.stack,
+            details: err,
+        }),
+    });
 
-    if (isDevelopment) {
-        if (err.stack) {
-            errorResponse.stack = err.stack;
-        }
-        errorResponse.details = err;
-    }
+    // Omit dev-only fields from response in production
+    const { stack, details, ...response } = problem;
+    const body = isDevelopment ? problem : response;
 
-    return res.status(statusCode).json(errorResponse);
+    return res.status(statusCode).json(body);
 };
 
 class ErrorHandler extends Error {
@@ -177,7 +200,6 @@ class ErrorHandler extends Error {
         this.isOperational = isOperational;
         this.name = 'ErrorHandler';
 
-        // Maintains proper stack trace for where error was thrown
         if (Error.captureStackTrace) {
             Error.captureStackTrace(this, this.constructor);
         }

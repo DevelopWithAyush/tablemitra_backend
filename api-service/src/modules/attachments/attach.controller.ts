@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import { asyncHandler } from "../../utils/async-handler.js";
+import { sendServiceError } from "../../utils/error-response.js";
 import { IJwtPayload } from "../auth/auth.types.js";
 import attachmentService from "./attach.service.js";
 import {
@@ -19,10 +20,7 @@ export const requestUpload = asyncHandler(async (req: Request, res: Response) =>
     const result = await attachmentService.requestUpload(dto, user.sub);
 
     if (!result.success) {
-        return res.status(400).json({
-            success: false,
-            message: result.message,
-        });
+        return sendServiceError(res, 400, result.message ?? "Bad request", { instance: req.originalUrl });
     }
 
     return res.status(201).json({
@@ -43,10 +41,7 @@ export const confirmUpload = asyncHandler(async (req: Request, res: Response) =>
     const result = await attachmentService.confirmUpload(dto, user.sub);
 
     if (!result.success) {
-        return res.status(400).json({
-            success: false,
-            message: result.message,
-        });
+        return sendServiceError(res, 400, result.message ?? "Bad request", { instance: req.originalUrl });
     }
 
     return res.json({
@@ -67,10 +62,7 @@ export const getAttachmentById = asyncHandler(async (req: Request, res: Response
     const result = await attachmentService.getAttachmentById(attachmentId, user.sub);
 
     if (!result.success) {
-        return res.status(404).json({
-            success: false,
-            message: result.message,
-        });
+        return sendServiceError(res, 404, result.message ?? "Not found", { instance: req.originalUrl });
     }
 
     return res.json({

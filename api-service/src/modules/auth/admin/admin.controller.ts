@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import { asyncHandler } from "../../../utils/async-handler.js";
+import { sendServiceError } from "../../../utils/error-response.js";
 import * as adminService from "./admin.service.js";
 import type { AdminAuditContext } from "./admin.types.js";
 import type { IJwtPayload } from "../auth.types.js";
@@ -39,10 +40,7 @@ export const getRoleById = asyncHandler(async (req: Request, res: Response) => {
     const role = await adminService.getRoleById(id);
 
     if (!role) {
-        return res.status(404).json({
-            success: false,
-            message: "Role not found",
-        });
+        return sendServiceError(res, 404, "Role not found", { instance: req.originalUrl });
     }
 
     return res.json({
@@ -56,10 +54,7 @@ export const createRole = asyncHandler(async (req: Request, res: Response) => {
     const result = await adminService.createRole(input, getAuditContext(req));
 
     if (!result.success) {
-        return res.status(400).json({
-            success: false,
-            message: result.message,
-        });
+return sendServiceError(res, 400, result.message ?? "Bad request", { instance: req.originalUrl });
     }
 
     return res.status(201).json({
@@ -74,10 +69,7 @@ export const updateRole = asyncHandler(async (req: Request, res: Response) => {
     const result = await adminService.updateRole(id, input, getAuditContext(req));
 
     if (!result.success) {
-        return res.status(400).json({
-            success: false,
-            message: result.message,
-        });
+return sendServiceError(res, 400, result.message ?? "Bad request", { instance: req.originalUrl });
     }
 
     return res.json({
@@ -91,10 +83,7 @@ export const deleteRole = asyncHandler(async (req: Request, res: Response) => {
     const result = await adminService.deleteRole(id, getAuditContext(req));
 
     if (!result.success) {
-        return res.status(400).json({
-            success: false,
-            message: result.message,
-        });
+return sendServiceError(res, 400, result.message ?? "Bad request", { instance: req.originalUrl });
     }
 
     return res.json({
@@ -118,10 +107,7 @@ export const getPermissionById = asyncHandler(async (req: Request, res: Response
     const permission = await adminService.getPermissionById(id);
 
     if (!permission) {
-        return res.status(404).json({
-            success: false,
-            message: "Permission not found",
-        });
+        return sendServiceError(res, 404, "Permission not found", { instance: req.originalUrl });
     }
 
     return res.json({
@@ -135,10 +121,7 @@ export const createPermission = asyncHandler(async (req: Request, res: Response)
     const result = await adminService.createPermission(input, getAuditContext(req));
 
     if (!result.success) {
-        return res.status(400).json({
-            success: false,
-            message: result.message,
-        });
+return sendServiceError(res, 400, result.message ?? "Bad request", { instance: req.originalUrl });
     }
 
     return res.status(201).json({
@@ -153,10 +136,7 @@ export const updatePermission = asyncHandler(async (req: Request, res: Response)
     const result = await adminService.updatePermission(id, input, getAuditContext(req));
 
     if (!result.success) {
-        return res.status(400).json({
-            success: false,
-            message: result.message,
-        });
+return sendServiceError(res, 400, result.message ?? "Bad request", { instance: req.originalUrl });
     }
 
     return res.json({
@@ -170,10 +150,7 @@ export const deletePermission = asyncHandler(async (req: Request, res: Response)
     const result = await adminService.deletePermission(id, getAuditContext(req));
 
     if (!result.success) {
-        return res.status(400).json({
-            success: false,
-            message: result.message,
-        });
+return sendServiceError(res, 400, result.message ?? "Bad request", { instance: req.originalUrl });
     }
 
     return res.json({
@@ -188,10 +165,7 @@ export const assignPermissionsToRole = asyncHandler(async (req: Request, res: Re
     const result = await adminService.assignPermissionsToRole(roleId, permissionIds, getAuditContext(req));
 
     if (!result.success) {
-        return res.status(400).json({
-            success: false,
-            message: result.message,
-        });
+return sendServiceError(res, 400, result.message ?? "Bad request", { instance: req.originalUrl });
     }
 
     return res.json({
@@ -206,10 +180,7 @@ export const removePermissionFromRole = asyncHandler(async (req: Request, res: R
     const result = await adminService.removePermissionFromRole(roleId, permissionId, getAuditContext(req));
 
     if (!result.success) {
-        return res.status(400).json({
-            success: false,
-            message: result.message,
-        });
+return sendServiceError(res, 400, result.message ?? "Bad request", { instance: req.originalUrl });
     }
 
     return res.json({
@@ -224,10 +195,7 @@ export const syncRolePermissions = asyncHandler(async (req: Request, res: Respon
     const result = await adminService.syncRolePermissions(roleId, permissionIds, getAuditContext(req));
 
     if (!result.success) {
-        return res.status(400).json({
-            success: false,
-            message: result.message,
-        });
+return sendServiceError(res, 400, result.message ?? "Bad request", { instance: req.originalUrl });
     }
 
     return res.json({
