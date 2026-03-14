@@ -5,8 +5,8 @@ const mongoId = z.string().regex(/^[0-9a-fA-F]{24}$/, "Invalid ID format");
 const orderItemSchema = z.object({
     itemId: mongoId,
     itemName: z.string().min(1).max(200),
-    price: z.number().positive(),
-    discountedPrice: z.number().positive().optional(),
+    price: z.number().min(0, "Price must be non-negative (0 allowed for complimentary items)"),
+    discountedPrice: z.number().min(0).optional(),
     quantity: z.number().int().positive(),
     variantId: mongoId.optional(),
     variantName: z.string().max(100).optional(),
