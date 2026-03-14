@@ -177,17 +177,9 @@ export const errorMiddleware = (
         detail,
         instance,
         errors: fieldErrors,
-        ...(isDevelopment && {
-            stack: err.stack,
-            details: err,
-        }),
     });
 
-    // Omit dev-only fields from response in production
-    const { stack, details, ...response } = problem;
-    const body = isDevelopment ? problem : response;
-
-    return res.status(statusCode).json(body);
+    return res.status(statusCode).json(problem);
 };
 
 class ErrorHandler extends Error {

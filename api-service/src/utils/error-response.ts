@@ -30,7 +30,9 @@ export function sendErrorResponse(
     return res.status(status).json(response);
 }
 
-/** Build RFC 7807 problem object (for middleware; does not send) */
+/** Build RFC 7807 problem object (for middleware; does not send).
+ * Never includes stack or raw error details - log those server-side only.
+ */
 export function buildProblemResponse(
     status: number,
     type: ApiErrorType,
@@ -39,11 +41,9 @@ export function buildProblemResponse(
         detail?: string;
         instance?: string;
         errors?: FieldError[];
-        stack?: string;
-        details?: unknown;
     }
-): ApiErrorResponse & { stack?: string; details?: unknown } {
-    const response: ApiErrorResponse & { stack?: string; details?: unknown } = {
+): ApiErrorResponse {
+    return {
         success: false,
         type,
         title: options?.title ?? ERROR_TYPE_TITLES[type],
@@ -52,9 +52,6 @@ export function buildProblemResponse(
         ...(options?.instance && { instance: options.instance }),
         ...(options?.errors && options.errors.length > 0 && { errors: options.errors }),
     };
-    if (options?.stack) response.stack = options.stack;
-    if (options?.details !== undefined) response.details = options.details;
-    return response;
 }
 
 /** Send error from service result (controllers: status + detail from result.message) */
