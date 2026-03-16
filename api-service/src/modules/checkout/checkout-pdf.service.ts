@@ -1,3 +1,4 @@
+import { Types } from "mongoose";
 import { readFile } from "fs/promises";
 import path from "path";
 import logger from "../../helpers/logger/index.js";
@@ -26,11 +27,13 @@ function formatCurrency(n: number): string {
 }
 
 export async function generateCheckoutBillPdf(
-    checkoutSessionId: string
+    roomSessionId: string
 ): Promise<{ success: boolean; message?: string; data?: Buffer }> {
-    const session = await CheckoutSessionModel.findById(checkoutSessionId).lean();
+    const session = await CheckoutSessionModel.findOne({ roomSessionId })
+        .sort({ createdAt: -1 })
+        .lean();
     if (!session) {
-        return { success: false, message: "Checkout session not found" };
+        return { success: false, message: "Checkout not found for this room session. Proceed checkout first." };
     }
 
     const hotelId = (session.hotelId as { toString(): string }).toString();

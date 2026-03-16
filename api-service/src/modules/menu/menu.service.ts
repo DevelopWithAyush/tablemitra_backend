@@ -750,8 +750,11 @@ class MenuService {
                 item.set("taxes", dto.taxes ?? []);
             }
             if (dto.suggestedItemIds !== undefined) {
-                // Validate cross-hotel ownership before persisting
+                // Validate: no self-reference, and all belong to this hotel
                 if (dto.suggestedItemIds.length > 0) {
+                    if (dto.suggestedItemIds.some((id) => id === itemId)) {
+                        return { success: false, message: "Item cannot suggest itself as an upsell" };
+                    }
                     const validCount = await ItemModel.countDocuments({
                         _id: { $in: dto.suggestedItemIds.map((id) => new Types.ObjectId(id)) },
                         hotelId: new Types.ObjectId(hotelId),
@@ -765,6 +768,13 @@ class MenuService {
 
             // Handle variants update
             if (dto.variants !== undefined) {
+                // Validate duplicate variant shortCodes before DB write
+                const shortCodes = dto.variants.map((v) => v.shortCode.toUpperCase());
+                const duplicateShortCode = shortCodes.find((sc, i) => shortCodes.indexOf(sc) !== i);
+                if (duplicateShortCode) {
+                    return { success: false, message: `Duplicate variant short code: ${duplicateShortCode}` };
+                }
+
                 // Wrap all three writes atomically: deleteMany + optional insertMany + item.save().
                 // Without a transaction, deleteMany succeeding but insertMany failing would
                 // permanently destroy all variants with no way to recover them.
@@ -797,8 +807,11 @@ class MenuService {
                         item.price = undefined;
                         item.discountedPrice = undefined;
                     } else {
+                        // Converting to non-variant: set price from dto (validator requires price when variants is [])
                         item.minVariantPrice = undefined;
                         item.maxVariantPrice = undefined;
+                        item.price = dto.price ?? undefined;
+                        item.discountedPrice = dto.discountedPrice ?? undefined;
                     }
 
                     await item.save({ session });
@@ -806,9 +819,13 @@ class MenuService {
             } else {
                 // No variants involved — update direct pricing and save (single write)
                 if (!item.hasVariants) {
-                    if (dto.price !== undefined) item.price = dto.price ?? undefined;
+                    if (dto.price !== undefined) {
+                        item.price = dto.price ?? undefined;
+                        item.markModified("price");
+                    }
                     if (dto.discountedPrice !== undefined) {
                         item.discountedPrice = dto.discountedPrice ?? undefined;
+                        item.markModified("discountedPrice");
                     }
                 }
                 await item.save();

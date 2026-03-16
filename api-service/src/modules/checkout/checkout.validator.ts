@@ -8,16 +8,25 @@ const AdjustmentSchema = z.object({
     label: z.string().max(200).optional(),
 });
 
-export const GetCheckoutPreviewSchema = z.object({
-    query: z.object({
-        roomSessionId: MongoIdSchema,
-    }),
-});
+export const GetCheckoutPreviewSchema = z
+    .object({
+        query: z.object({
+            roomSessionId: MongoIdSchema.optional(),
+            checkoutSessionId: MongoIdSchema.optional(),
+        }),
+    })
+    .refine((data) => !!(data.query.roomSessionId || data.query.checkoutSessionId), {
+        message: "Either roomSessionId or checkoutSessionId is required",
+        path: ["query"],
+    })
+    .refine(
+        (data) => !(data.query.roomSessionId && data.query.checkoutSessionId),
+        { message: "Provide only one of roomSessionId or checkoutSessionId", path: ["query"] }
+    );
 
 export const ProceedCheckoutSchema = z.object({
     body: z.object({
-        hotelId: MongoIdSchema,
-        roomNumber: z.string().min(1).max(50),
+        roomSessionId: MongoIdSchema,
         adjustments: z.array(AdjustmentSchema).default([]),
         paymentMethod: z.enum(["CASH", "CARD", "UPI", "BANK_TRANSFER", "OTHER"]),
         guestDetails: z
@@ -29,8 +38,16 @@ export const ProceedCheckoutSchema = z.object({
     }),
 });
 
+export const GetCheckoutHistorySchema = z.object({
+    query: z.object({
+        search: z.string().max(200).optional(),
+        page: z.coerce.number().int().min(1).default(1),
+        limit: z.coerce.number().int().min(1).max(50).default(20),
+    }),
+});
+
 export const GetCheckoutBillPdfSchema = z.object({
-    params: z.object({
-        checkoutSessionId: MongoIdSchema,
+    query: z.object({
+        roomSessionId: MongoIdSchema,
     }),
 });

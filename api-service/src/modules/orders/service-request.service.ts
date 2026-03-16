@@ -345,9 +345,10 @@ export const serviceRequestService = {
             const bill = d.bill as Partial<{ toPay: number }> | undefined;
             const toPay = bill?.toPay ?? (d.totalAmount as number);
             return {
+                _id: (d._id as Types.ObjectId).toString(),
                 items: (d.items as unknown[]) ?? [],
                 totalAmount: d.totalAmount as number,
-                toPay,
+                bill: { toPay },
                 createdAt: (d.createdAt as Date).toISOString(),
             };
         });

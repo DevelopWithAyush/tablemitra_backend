@@ -12,6 +12,8 @@ const DescriptionField = z.string().max(500, "Description must not exceed 500 ch
 const ShortCodeField = z.string().min(1, "Short code is required").max(10, "Short code must not exceed 10 characters").toUpperCase();
 const SortOrderField = z.number().int().min(0).default(0);
 const PriceField = z.number().positive("Price must be positive");
+/** Allows 0 for complimentary items (e.g. water). Use with .optional() or .nullable() as needed. */
+const PriceFieldAllowZero = z.coerce.number().min(0, "Price must be non-negative");
 
 // ==================== AVAILABILITY SCHEMA ====================
 
@@ -48,11 +50,11 @@ export const VariantSchema = z.object({
 }).refine(
     (data) => {
         if (data.discountedPrice !== undefined) {
-            return data.discountedPrice < data.price;
+            return data.discountedPrice <= data.price;
         }
         return true;
     },
-    { message: "Discounted price must be less than original price" }
+    { message: "Discounted price must be less than or equal to original price" }
 );
 
 // ==================== CATEGORY SCHEMAS ====================
@@ -88,8 +90,8 @@ export const CreateItemSchema = z.object({
         message: "Type must be veg, non-veg, or egg",
     }),
     preparationTimeMinutes: z.number().int().min(1, "Preparation time must be at least 1 minute"),
-    price: PriceField.optional(),
-    discountedPrice: PriceField.optional(),
+    price: PriceFieldAllowZero.optional(),
+    discountedPrice: PriceFieldAllowZero.optional(),
     isPopular: z.boolean().default(false),
     availability: AvailabilitySchema.optional(),
     taxes: z.array(TaxEntrySchema).optional(),
@@ -110,11 +112,20 @@ export const CreateItemSchema = z.object({
 ).refine(
     (data) => {
         if (data.discountedPrice !== undefined && data.price !== undefined) {
-            return data.discountedPrice < data.price;
+            return data.discountedPrice <= data.price;
         }
         return true;
     },
-    { message: "Discounted price must be less than original price" }
+    { message: "Discounted price must be less than or equal to original price" }
+).refine(
+    (data) => {
+        if (data.variants && data.variants.length > 1) {
+            const codes = data.variants.map((v) => v.shortCode.toUpperCase());
+            return codes.length === new Set(codes).size;
+        }
+        return true;
+    },
+    { message: "Variant short codes must be unique within the item" }
 );
 
 export const UpdateItemSchema = z.object({
@@ -125,17 +136,32 @@ export const UpdateItemSchema = z.object({
     sortOrder: SortOrderField.optional(),
     type: z.enum(["veg", "non-veg", "egg"]).optional(),
     preparationTimeMinutes: z.number().int().min(1).optional(),
-    price: PriceField.nullable().optional(),
-    discountedPrice: PriceField.nullable().optional(),
+    price: PriceFieldAllowZero.nullable().optional(),
+    discountedPrice: PriceFieldAllowZero.nullable().optional(),
     isPopular: z.boolean().optional(),
     isActive: z.boolean().optional(),
     availability: AvailabilitySchema.nullable().optional(),
     taxes: z.array(TaxEntrySchema).nullable().optional(),
     suggestedItemIds: z.array(MongoIdField).optional(),
-    variants: z.array(VariantSchema.extend({
-        _id: MongoIdField.optional(), // For updating existing variants
-    })).optional(),
-});
+    variants: z.array(VariantSchema).optional(),
+}).refine(
+    (data) => {
+        if (data.variants && data.variants.length === 0) {
+            return data.price !== undefined && data.price !== null;
+        }
+        return true;
+    },
+    { message: "Price is required when removing all variants (converting to non-variant item)", path: ["price"] }
+).refine(
+    (data) => {
+        if (data.variants && data.variants.length > 1) {
+            const codes = data.variants.map((v) => v.shortCode.toUpperCase());
+            return codes.length === new Set(codes).size;
+        }
+        return true;
+    },
+    { message: "Variant short codes must be unique within the item", path: ["variants"] }
+);
 
 // ==================== PAGINATION SCHEMA ====================
 

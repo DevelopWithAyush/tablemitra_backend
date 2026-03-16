@@ -20,9 +20,17 @@ export interface CheckoutPreview {
     roomSessionId: string;
     roomNumber: string;
     hotelId: string;
+    /** Present when viewing a past checkout; use for Print Bill API */
+    checkoutSessionId?: string;
+    /** When true: hide Proceed button, show only Print Bill */
+    isAlreadyCheckout: boolean;
     foodOrders: CheckoutPreviewFoodOrder[];
     serviceRequests: CheckoutPreviewServiceRequest[];
     ordersSubtotal: number;
+    /** Applied adjustments (only when isAlreadyCheckout) */
+    adjustments?: Array<{ type: string; amount: number; label?: string }>;
+    /** Final billed amount (only when isAlreadyCheckout) */
+    finalAmount?: number;
     guestDetails?: { name?: string; phone?: string }[];
 }
 
@@ -33,9 +41,17 @@ export interface CheckoutAdjustmentInput {
 }
 
 export interface ProceedCheckoutInput {
-    hotelId: string;
-    roomNumber: string;
+    roomSessionId: string;
     adjustments: CheckoutAdjustmentInput[];
     paymentMethod: CheckoutPaymentMethod;
+    guestDetails?: { name?: string; phone?: string };
+}
+
+export interface CheckoutHistoryItem {
+    checkoutSessionId: string;
+    roomSessionId: string;
+    roomNumber: string;
+    paidAt: string;
+    finalAmount: number;
     guestDetails?: { name?: string; phone?: string };
 }
