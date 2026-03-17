@@ -9,7 +9,7 @@ export const connectRedis = async (url: string) => {
     redisClient = createClient({
         url: url,
         socket: {
-            reconnectStrategy: (retries) => Math.min(retries * 50, 2000),
+            reconnectStrategy: (retries: number) => Math.min(retries * 50, 2000),
         },
     });
 
@@ -17,7 +17,7 @@ export const connectRedis = async (url: string) => {
         logger.info("Redis connected");
     });
 
-    redisClient.on("error", (err) => {
+    redisClient.on("error", (err: Error) => {
         logger.error("Redis error:", err);
     });
 

@@ -8,7 +8,7 @@ export const requestLogger = morgan(
     ":method :url :status :response-time ms :message",
     {
         stream: {
-            write: (message) => logger.info(message.trim()),
+            write: (message: string) => logger.info(message.trim()),
         },
     }
 );
