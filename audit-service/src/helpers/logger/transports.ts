@@ -21,15 +21,16 @@ const prodConsole = new winston.transports.Console({
     format: combine(timestamp(), json()),
 });
 
-const errorFile = new DailyRotateFile({
-    filename: "logs/error-%DATE%.log",
-    datePattern: "YYYY-MM-DD",
-    level: "error",
-    zippedArchive: true,
-    maxSize: "20m",
-    maxFiles: "14d",
-});
+const getErrorFileTransport = () =>
+    new DailyRotateFile({
+        filename: "logs/error-%DATE%.log",
+        datePattern: "YYYY-MM-DD",
+        level: "error",
+        zippedArchive: true,
+        maxSize: "20m",
+        maxFiles: "14d",
+    });
 
 export const transports = isProd
-    ? [prodConsole, errorFile]
+    ? [prodConsole, getErrorFileTransport()]
     : [devConsole];
