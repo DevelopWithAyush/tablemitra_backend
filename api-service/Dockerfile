@@ -24,6 +24,9 @@ ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 COPY package*.json ./
 RUN npm ci --only=production && npm cache clean --force
 
+# Create logs dir for file rotation (writable by node user)
+RUN mkdir -p logs && chown -R node:node logs
+
 # Use non-root user for security
 USER node
 

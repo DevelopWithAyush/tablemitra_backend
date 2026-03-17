@@ -342,13 +342,16 @@ export const serviceRequestService = {
             .lean();
 
         return docs.map((d: Record<string, unknown>) => {
-            const bill = d.bill as Partial<{ toPay: number }> | undefined;
+            const bill = d.bill as Partial<{ subtotal: number; serviceCharge: number; gstAndOther: number; toPay: number }> | undefined;
             const toPay = bill?.toPay ?? (d.totalAmount as number);
+            const subtotal = bill?.subtotal ?? toPay;
+            const gstAndOther = bill?.gstAndOther ?? 0;
+            const serviceCharge = bill?.serviceCharge ?? 0;
             return {
                 _id: (d._id as Types.ObjectId).toString(),
                 items: (d.items as unknown[]) ?? [],
                 totalAmount: d.totalAmount as number,
-                bill: { toPay },
+                bill: { subtotal, serviceCharge, gstAndOther, toPay },
                 createdAt: (d.createdAt as Date).toISOString(),
             };
         });

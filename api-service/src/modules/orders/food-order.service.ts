@@ -605,7 +605,7 @@ export const foodOrderService = {
         return docs.map((d: Record<string, unknown>) => ({
             _id: (d._id as Types.ObjectId).toString(),
             items: (d.items as unknown[]) ?? [],
-            bill: d.bill as { subtotal: number; toPay: number },
+            bill: d.bill as { subtotal: number; serviceCharge: number; gstAndOther: number; toPay: number },
             count: d.count as number,
             createdAt: (d.createdAt as Date).toISOString(),
         }));

@@ -15,15 +15,20 @@ function escapeHtml(s: string): string {
         .replace(/"/g, "&quot;");
 }
 
-function formatDate(d: Date): string {
+function formatDate(d: Date, timeZone?: string): string {
     return d.toLocaleString("en-IN", {
         dateStyle: "medium",
         timeStyle: "short",
+        ...(timeZone && { timeZone }),
     });
 }
 
 function formatCurrency(n: number): string {
     return n.toFixed(2);
+}
+
+function roundTo2(n: number): number {
+    return Math.round(n * 100) / 100;
 }
 
 export async function generateCheckoutBillPdf(
@@ -48,6 +53,7 @@ export async function generateCheckoutBillPdf(
         address?: { street?: string; city?: string; state?: string; country?: string; pincode?: string };
         contact?: { phone?: string; email?: string };
         businessDetails?: { gstin?: string; pan?: string; fssaiNumber?: string };
+        settings?: { timezone?: string };
     };
 
     const addr = hotel.address ?? {};
@@ -159,7 +165,17 @@ export async function generateCheckoutBillPdf(
 
     const adjustmentsRowsHtml = adjustmentRows.join("");
 
+    const hotelTimezone = hotel.settings?.timezone ?? "Asia/Kolkata";
     const paidAt = session.paidAt ? new Date(session.paidAt as Date) : new Date();
+
+    type BillShape = { subtotal?: number; gstAndOther?: number; toPay?: number };
+    const allBills: BillShape[] = [
+        ...(foodOrders as Array<{ bill?: BillShape }>).map((o) => o.bill ?? {}),
+        ...(serviceRequests as Array<{ bill?: BillShape }>).map((r) => r.bill ?? {}),
+    ];
+    const ordersSubtotalBeforeTax = roundTo2(allBills.reduce((sum, b) => sum + (b.subtotal ?? b.toPay ?? 0), 0));
+    const ordersTaxTotal = roundTo2(allBills.reduce((sum, b) => sum + (b.gstAndOther ?? 0), 0));
+    const ordersTotal = (session.ordersSubtotal as number) ?? roundTo2(ordersSubtotalBeforeTax + ordersTaxTotal);
 
     const templatePath = path.join(process.cwd(), "src", "template", "checkout-bill.html");
     let html = await readFile(templatePath, "utf-8");
@@ -172,12 +188,14 @@ export async function generateCheckoutBillPdf(
         .replace("{{PAN}}", escapeHtml(pan))
         .replace("{{FSSAI}}", escapeHtml(fssai))
         .replace("{{ROOM_NUMBER}}", escapeHtml((session.roomNumber as string) ?? ""))
-        .replace("{{CHECKOUT_DATE}}", formatDate(paidAt))
+        .replace("{{CHECKOUT_DATE}}", formatDate(paidAt, hotelTimezone))
         .replace("{{GUEST_DETAILS}}", guestLine)
         .replace("{{FOOD_ORDERS_SECTION}}", foodOrdersHtml)
         .replace("{{SERVICE_REQUESTS_SECTION}}", serviceRequestsHtml)
         .replace("{{ADJUSTMENTS_SECTION}}", adjustmentsSection)
-        .replace("{{ORDERS_SUBTOTAL}}", formatCurrency(session.ordersSubtotal as number))
+        .replace("{{ORDERS_SUBTOTAL_BEFORE_TAX}}", formatCurrency(ordersSubtotalBeforeTax))
+        .replace("{{ORDERS_TAX}}", formatCurrency(ordersTaxTotal))
+        .replace("{{ORDERS_TOTAL}}", formatCurrency(ordersTotal))
         .replace("{{ADJUSTMENTS_ROWS}}", adjustmentsRowsHtml)
         .replace("{{FINAL_AMOUNT}}", formatCurrency(session.finalAmount as number));
 

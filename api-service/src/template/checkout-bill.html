@@ -39,7 +39,9 @@
     {{SERVICE_REQUESTS_SECTION}}
     {{ADJUSTMENTS_SECTION}}
     <div class="totals">
-        <div class="total-row"><span>Subtotal (Orders)</span><span>₹ {{ORDERS_SUBTOTAL}}</span></div>
+        <div class="total-row"><span>Subtotal</span><span>₹ {{ORDERS_SUBTOTAL_BEFORE_TAX}}</span></div>
+        <div class="total-row"><span>Tax (GST)</span><span>₹ {{ORDERS_TAX}}</span></div>
+        <div class="total-row"><span>Orders Total</span><span>₹ {{ORDERS_TOTAL}}</span></div>
         {{ADJUSTMENTS_ROWS}}
         <div class="total-row total-final"><span>Amount to Pay</span><span>₹ {{FINAL_AMOUNT}}</span></div>
     </div>
